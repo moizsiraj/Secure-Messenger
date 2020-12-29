@@ -43,6 +43,8 @@ void *ServerInput2Client(void *ptr);
 
 void *clientInput2Server(void *clientID);
 
+int bindIP(char *username, string IP);
+
 struct clients {
     int clientID = -1;
     int readingEnd = -1;
@@ -53,11 +55,10 @@ struct clients {
     std::string status;
 };
 
-std::string processList[50][6];
 std::string KDC[50][2];
+std::string UIP[50][2];
 int noOfUsers = 0;
-int currentListIndex = 0;
-int activeProcesses = 0;
+int noOfConUsers = 0;
 int write2CH[2];
 int write2CON[2];
 int currentClientIndex = -1;
@@ -117,15 +118,8 @@ int main() {
             clientHandlerPID = fork();
             if (clientHandlerPID == 0) {
                 pthread_t clientHThread;
-                pthread_t inputHThread;
-                int clientHID;
-                int inputHID;
-
-                clientHID = pthread_create(&clientHThread, nullptr, clientCommandProcessor, (void *) nullptr);
-//                inputHID = pthread_create(&inputHThread, nullptr, ServerInput2Client, (void *) nullptr);
-
+                pthread_create(&clientHThread, nullptr, clientCommandProcessor, (void *) nullptr);
                 pthread_join(clientHThread, nullptr);
-//                pthread_join(inputHThread, nullptr);
             }
         } else {
             write(STDOUT_FILENO, "Connection fail\n", 16);
@@ -242,6 +236,8 @@ int setOperation(char *operationText) {
         operation = 4;
     } else if (strcmp(operationText, "disconnect") == 0) {
         operation = 5;
+    } else if (strcmp(operationText, "exit") == 0) {
+        operation = 6;
     } else {
         operation = -1;
     }
@@ -261,6 +257,8 @@ int setOperationInput(char *operationText) {
         operation = 4;
     } else if (strcmp(operationText, "disconnect") == 0) {
         operation = 5;
+    } else if (strcmp(operationText, "exit") == 0) {
+        operation = 6;
     } else {
         operation = -1;
     }
@@ -297,19 +295,30 @@ void signal_handler_CONHEXIT(int signo) {
     }
 }
 
-int registerUser(char* username, char* publicKey) {
+int registerUser(char *username, char *publicKey) {
+    std::string user(username);
     write(STDOUT_FILENO, "RU1 \n", 5);
+    char out[10];
     for (int i = 0; i < noOfUsers; i++) {
-        if (strcmp(username, KDC[i][0].c_str()) == 0 || strcmp(publicKey, KDC[i][1].c_str()) == 0) {
+        int count = sprintf(out, "%s", user.c_str());
+        write(STDOUT_FILENO, out, count);
+        count = sprintf(out, "%s", KDC[i][0].c_str());
+        write(STDOUT_FILENO, out, count);
+        write(STDOUT_FILENO, "RU3 \n", 5);
+        if (strcmp(user.c_str(), KDC[i][0].c_str()) == 0 || strcmp(publicKey, KDC[i][1].c_str()) == 0) {
             return -1;
         }
     }
     write(STDOUT_FILENO, "RU2 \n", 5);
-    noOfUsers++;
-    std::string user(username);
+
+    char o[10];
+    int count = sprintf(o, "%s\n", to_string(noOfUsers).c_str());
+    write(STDOUT_FILENO, o, count);
     std::string key(publicKey);
+
     KDC[noOfUsers][0] = user;
     KDC[noOfUsers][1] = key;
+    noOfUsers++;
     return 0;
 }
 
@@ -387,52 +396,26 @@ void *clientCommandProcessor(void *ptr) {
             }
         }
 
-//        //bindIP
-//        else if (operation == 2) {
-//            char *username;
-//            username = strtok(nullptr, " ");
-//            if (username != nullptr) {
-//                int checkBinding = bindUserIP(username);
-//            } else {
-//                write(msgsock, "Input next command\n", 19);
-//            }
-//        }
-
-//        //list
-//        else if (operation == 7) {
-//            char output[500];
-//            std::string print;
-//            if (currentListIndex == 0) {
-//                write(msgsock, "No processes\nInput next command\n", 32);
-//            } else {
-//                print.append("Process PID\tProcess Name\tStatus\t\tStart Time\t\tEnd Time\t\tElapsed Time\n");
-//                for (int i = 0; i < currentListIndex; ++i) {
-//                    for (int j = 0; j < 6; ++j) {
-//                        print.append(processList[i][j]).append("\t\t");
-//                    }
-//                    print.append("\n");
-//                }
-//                int read = sprintf(output, "%s", print.c_str());
-//                sprintf(&output[read - 1], "%s", "\nInput next command\n");
-//                int count = read + 20;
-//                write(msgsock, output, count);
-//            }
-//        }
-
-//         //print
-//        else if (operation == 8) {
-//            token = strtok(nullptr, " ");
-//            char messageBuffer[500];
-//            std::string print;
-//            print.append("Message from ").append(ip).append(": ");
-//            while (token != nullptr) {
-//                print.append(token).append(" ");
-//                token = strtok(nullptr, " ");
-//            }
-//            print.append("\n").append("Input next command\n");
-//            int read = sprintf(messageBuffer, "%s", print.c_str());
-//            write(STDOUT_FILENO, messageBuffer, read);
-//            write(msgsock, "Input next command\n", 19);
+            //bindIP
+        else if (operation == 2) {
+            char *username;
+            username = strtok(nullptr, " ");
+            if (username == nullptr) {
+                write(msgsock, "Invalid Command. Input next command\n", 36);
+            } else {
+                string registerCommand = "messaging ";
+                registerCommand.append(username);
+                int count = sprintf(outputText, "%s", registerCommand.c_str());
+                write(STDOUT_FILENO, outputText, count);
+                write(STDOUT_FILENO, "CCP 1\n", 6);
+                write(write2CON[1], outputText, count);
+                write(STDOUT_FILENO, "CCP 2\n", 6);
+                count = read(write2CH[0], outputText, 1000);
+                write(STDOUT_FILENO, "CCP 3\n", 6);
+                write(msgsock, outputText, count);
+                write(STDOUT_FILENO, "CCP 4\n", 6);
+            }
+        }
     }
     return nullptr;
 }
@@ -566,66 +549,6 @@ void updateClientList(int pid) {
     }
 }
 
-//Input handler thread
-void *ServerInput2Client(void *ptr) {
-    char input[1000];
-    char output[1000];
-    char saveOperator[10];
-    int operation = -1;
-    char *token;
-    int checkRead;
-
-    while (true) {
-        write(STDOUT_FILENO, "SI2C 1\n", 7);
-        checkRead = read(write2CH[0], input, 1000);//B2//B4
-        write(STDOUT_FILENO, "SI2C 2\n", 7);
-        input[checkRead - 1] = '\0';//adding null at the end
-
-        token = strtok(input, " ");
-        sscanf(token, "%s", saveOperator);
-        operation = setOperationInput(saveOperator);
-
-        if (operation == 1 || operation == 3) {
-            std::string print;
-            token = strtok(nullptr, " ");
-            while (token != nullptr) {
-                print.append(token).append(" ");
-                token = strtok(nullptr, " ");
-            }
-            print.append("\n");
-            int count = sprintf(output, "%s", print.c_str());
-            write(msgsock, output, count);
-        }
-
-            //sending list to input handler
-        else if (operation == 2) {
-            std::string print;
-            if (currentListIndex == 0) {
-                write(write2CON[1], "No processes\n", 13);
-            } else {
-                print.append("Process PID\tProcess Name\tStatus\t\tStart Time\t\tEnd Time\t\tElapsed Time\n");
-                for (int i = 0; i < currentListIndex; ++i) {
-                    for (int j = 0; j < 6; ++j) {
-                        print.append(processList[i][j]).append("\t\t");
-                    }
-                    print.append("\n");
-                }
-                int count = sprintf(output, "%s", print.c_str());
-                write(write2CON[1], output, count);
-            }
-        }
-
-            //closing the clientCommandProcessor handler on server exit
-        else if (operation == 5) {
-            int *status = nullptr;
-            write(msgsock, "exit\0", 5);
-            close(sock);
-            close(msgsock);
-            wait(status);
-            exit(getpid());
-        }
-    }
-}
 
 void *clientInput2Server(void *clientID) {
     char input[1000];
@@ -641,7 +564,7 @@ void *clientInput2Server(void *clientID) {
         checkRead = read(clientsList[CID].readingEnd, input, 1000);//B2//B4
         write(STDOUT_FILENO, input, checkRead);
         write(STDOUT_FILENO, "CIS 2\n", 6);
-        input[checkRead - 1] = '\0';//adding null at the end
+        input[checkRead] = '\0';//adding null at the end
         write(STDOUT_FILENO, "CIS 3\n", 6);
         token = strtok(input, " ");
         sscanf(token, "%s", saveOperator);
@@ -665,10 +588,23 @@ void *clientInput2Server(void *clientID) {
                 write(clientsList[CID].writingEnd, "Registration Successful\n", 24);
                 write(STDOUT_FILENO, "CIS 10\n", 6);
             }
-        }
-
-            //closing the clientCommandProcessor handler on server exit
-        else if (operation == 5) {
+        } else if (operation == 2) {
+            char *username;
+            username = strtok(nullptr, " ");
+            write(STDOUT_FILENO, "CIS 5\n", 6);
+            int bindCheck = bindIP(username, clientsList[CID].ip);
+            write(STDOUT_FILENO, "CIS 6\n", 6);
+            if (bindCheck == 1) {
+                write(STDOUT_FILENO, "CIS 7\n", 6);
+                write(clientsList[CID].writingEnd, "Connection Successful.\nInput next command\n", 42);
+                write(STDOUT_FILENO, "CIS 8\n", 6);
+            } else if (bindCheck == 0) {
+                write(STDOUT_FILENO, "CIS 9\n", 6);
+                write(clientsList[CID].writingEnd, "User Doesn't Exist.\nInput next command\n", 39);
+                write(STDOUT_FILENO, "CIS 10\n", 6);
+            }
+        }//closing the clientCommandProcessor handler on server exit
+        else if (operation == 6) {
             int *status = nullptr;
             write(msgsock, "exit\0", 5);
             close(sock);
@@ -677,4 +613,27 @@ void *clientInput2Server(void *clientID) {
             exit(getpid());
         }
     }
+}
+
+int bindIP(char *username, string IP) {
+    std::string user(username);
+    char out[10];
+    write(STDOUT_FILENO, "RU1 \n", 5);
+
+    bool exist = false;
+    for (int i = 0; i < noOfUsers; i++) {
+        if (strcmp(user.c_str(), KDC[i][0].c_str()) == 0) {
+            exist = true;
+            break;
+        }
+    }
+    if (exist) {
+        UIP[noOfConUsers][0] = user;
+        UIP[noOfConUsers][1] = IP;
+        noOfConUsers++;
+        return 1;
+    } else {
+        return 0;
+    }
+
 }
