@@ -21,8 +21,6 @@ void signal_handler_CONH(int signo);
 
 void signal_handler_CONHEXIT(int signo);
 
-bool checkFormat(char *input);
-
 std::string getTime();
 
 std::string elapsedTime(std::string startTime, std::string endTime);
@@ -31,13 +29,11 @@ int removeColon(std::string s);
 
 void createSock();
 
-double performOperation(int saveCurrentNumber, double currentTotal, int operation);
-
-int killProcess(char *PID);
+int registerUser(char *username, char *publicKey);
 
 int killAllProcess();
 
-int runProcess(char *processName, char *filePath);
+int bindUserIP(char *username);
 
 int setOperationInput(char *operationText);
 
@@ -60,6 +56,8 @@ struct clients {
 };
 
 std::string processList[50][6];
+std::string KDC[50][2];
+int noOfUsers = -1;
 int currentListIndex = 0;
 int activeProcesses = 0;
 int write2CH[2];
@@ -69,8 +67,6 @@ int activeClients = 0;
 int sock;
 int msgsock;
 std::string ip;
-bool divZero = false;
-bool getFirstNumber;
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
@@ -78,7 +74,6 @@ bool getFirstNumber;
 struct clients clientsList[50];
 
 int main() {
-
     if (signal(SIGCHLD, signal_handler_CONH) == SIG_ERR) {
         write(STDOUT_FILENO, "sig error", 9);
     }
@@ -170,53 +165,8 @@ void createSock() {
 }
 
 //run processes on client's command
-int runProcess(char *processName, char *filePath) {
-    int pipefds3[2];
-    int pipeCheck = pipe2(pipefds3, O_CLOEXEC);
-    int pidChild2 = fork();
-    if (pidChild2 == 0) {
-        close(pipefds3[0]);
-        int execCheck = execlp(processName, processName, filePath, NULL);
-        if (execCheck == -1) {
-            if (errno == EACCES) {
-                write(pipefds3[1], "User does not have access right for the file\n", 46);
-            } else if (errno == EFAULT) {
-                write(pipefds3[1], "File outside user accessible memory\n", 36);
-            } else if (errno == ENOENT) {
-                write(pipefds3[1], "File does not exist\n", 20);
-            } else {
-                write(pipefds3[1], "Error\n", 6);
-            }
-            kill(getpid(), SIGTERM);
-        }
-    }
-    if (pidChild2 > 0) {
-        close(pipefds3[1]);
-        char errorCheck[50];
-        processList[currentListIndex][0] = std::to_string(pidChild2);
-        processList[currentListIndex][1] = processName;
-        processList[currentListIndex][2] = "Running";
-        processList[currentListIndex][3] = getTime();
-        processList[currentListIndex][4] = "-";
-        processList[currentListIndex][5] = "\t-";
-        activeProcesses++;
-        currentListIndex++;
-        bool error = false;
-        int readCheck = read(pipefds3[0], errorCheck, 50);
-        if (readCheck > 0) {
-            error = true;
-        }
-        if (error) {
-            int noOfChars = sprintf(&errorCheck[readCheck - 1], "%s", "\nInput next command\n");
-            activeProcesses--;
-            currentListIndex--;
-            int count = readCheck + noOfChars;
-            write(msgsock, errorCheck, count);
-        } else {
-            write(msgsock, "Input next command\n", 19);
-        }
-    }
-    return 0;
+int bindUserIP(char *username) {
+
 }
 
 //method to get current time
@@ -285,9 +235,15 @@ int setOperation(char *operationText) {
 //operation setter for input handler and input thread
 int setOperationInput(char *operationText) {
     int operation;
-   if (strcmp(operationText, "register") == 0) {
+    if (strcmp(operationText, "register") == 0) {
         operation = 1;
     } else if (strcmp(operationText, "messaging") == 0) {
+        operation = 2;
+    } else if (strcmp(operationText, "connect") == 0) {
+        operation = 3;
+    } else if (strcmp(operationText, "message") == 0) {
+        operation = 4;
+    } else if (strcmp(operationText, "disconnect") == 0) {
         operation = 5;
     } else {
         operation = -1;
@@ -323,6 +279,18 @@ void signal_handler_CONHEXIT(int signo) {
             exit(getpid());
         }
     }
+}
+
+int registerUser(char *username, char *publicKey) {
+    for (int i = 0; i < noOfUsers; ++i) {
+        if (strcmp(username, KDC[i][0].c_str()) != 0 || strcmp(publicKey, KDC[i][1].c_str()) != 0) {
+            return -1;
+        }
+    }
+    noOfUsers++;
+    KDC[noOfUsers][0] = username;
+    KDC[noOfUsers][1] = publicKey;
+    return 0;
 }
 
 //client handler thread
@@ -380,73 +348,30 @@ void *client(void *ptr) {
         else if (operation == -1) {
             write(msgsock, "Invalid command.\nInput next command\n", 36);
         }
-
-            //add/sub/div/mul
-        else if (operation >= 1 && operation <= 4) {
-            int saveCurrentNumber;
-            bool invalidInput = false;
-            double total = 0;
-            getFirstNumber = false;
-            divZero = false;
-            char checkInteger[10];
-            token = strtok(nullptr, " ");
-
-            //calculation loop
-            while (token != nullptr) {
-                sscanf(token, "%d", &saveCurrentNumber);
-                sscanf(token, "%s", checkInteger);
-                if (checkFormat(checkInteger)) {
-                    total = performOperation(saveCurrentNumber, total, operation);
-                } else {
-                    invalidInput = true;
-                }
-                token = strtok(nullptr, " ");
-            }
-
-            //printing logic
-            int noOfCharPrint = sprintf(outputText, "%.5f \n", total);
-            int count;
-            if (invalidInput) {
-                int noOfChars = sprintf(&outputText[noOfCharPrint - 1], "%s",
-                                        "\nOnly Integer values considered for calculations. Others were ignored.\nInput next command\n");
-                count = noOfCharPrint + noOfChars;
-            } else if (divZero) {
-                int noOfChars = sprintf(&outputText[noOfCharPrint - 1], "%s",
-                                        "\nDivision by Zero. Invalid Operation.\nInput next command\n");
-                count = noOfCharPrint + noOfChars;
+            //register
+        else if (operation == 1) {
+            char *username;
+            char *publicKey;
+            username = strtok(nullptr, " ");
+            publicKey = strtok(nullptr, " ");
+            if (username == nullptr || publicKey == nullptr) {
+                write(msgsock, "Invalid Command. Input next command\n", 36);
             } else {
-                int noOfChars = sprintf(&outputText[noOfCharPrint - 1], "%s", "\nInput next command\n");
-                count = noOfCharPrint + noOfChars;
-            }
-            write(msgsock, outputText, count);
-        }
-
-            //kill
-        else if (operation == 5) {
-            char *processPID;
-            processPID = strtok(nullptr, " ");
-            if (processPID == nullptr) {
-                write(msgsock, "Input next command\n", 19);
-            } else {
-                int killCheck = killProcess(processPID);
-                if (killCheck == 1) {
-                    write(msgsock, "Invalid pid\nInput next command\n", 31);
-                } else if (killCheck == 0) {
-                    write(msgsock, "Process killed\nInput next command\n", 34);
-                } else {
-                    write(msgsock, "Process already killed.\nInput next command\n", 43);
+                int registerCheck = registerUser(username, publicKey);
+                if (registerCheck == -1) {
+                    write(msgsock, "User already exists. Registration failed. Please try again.", 59);
+                } else if (registerCheck == 0) {
+                    write(msgsock, "Registration Successful\n", 24);
                 }
             }
         }
 
             //run
-        else if (operation == 6) {
-            char *processName;
-            processName = strtok(nullptr, " ");
-            char *filePath;
-            filePath = strtok(nullptr, " ");
-            if (processName != nullptr) {
-                runProcess(processName, filePath);
+        else if (operation == 2) {
+            char *username;
+            username = strtok(nullptr, " ");
+            if (username != nullptr) {
+                int checkBinding = bindUserIP(username);
             } else {
                 write(msgsock, "Input next command\n", 19);
             }
@@ -516,7 +441,6 @@ void *connection(void *ptr) {
             if (operation == -1) {
                 write(STDOUT_FILENO, "Invalid Command\n", 16);
             }
-
 
                 //print to single client
             else if (operation == 3) {
