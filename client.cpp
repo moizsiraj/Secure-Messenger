@@ -20,15 +20,11 @@ bool continueInput = true;
 int main(int argc, char *argv[]) {
     char *ip = argv[1];
     char *port = argv[2];
-
     pthread_t GCThread, GRThread;
     int tid1, tid2;
-
     createSock(ip, port);
-
     int readCheck = read(sock, outputText, 500);
     write(STDOUT_FILENO, outputText, readCheck);
-
 
     tid1 = pthread_create(&GRThread, nullptr, getResult, (void *) nullptr);
     if (tid1) {
@@ -36,15 +32,12 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-
     tid2 = pthread_create(&GCThread, nullptr, getCommand, (void *) nullptr);
     if (tid2) {
         write(STDOUT_FILENO, "Error on read thread\n", 21);
         exit(EXIT_FAILURE);
     }
-
     pthread_join(GCThread, NULL);
-
     pthread_join(GRThread, NULL);
 }
 

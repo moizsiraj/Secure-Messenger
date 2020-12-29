@@ -15,8 +15,6 @@ using namespace std;
 
 int setOperation(char *operationText);
 
-void signal_handler_CH(int signo);
-
 void signal_handler_CONH(int signo);
 
 void signal_handler_CONHEXIT(int signo);
@@ -31,19 +29,19 @@ void createSock();
 
 int registerUser(char *username, char *publicKey);
 
-int killAllProcess();
-
 int bindUserIP(char *username);
 
 int setOperationInput(char *operationText);
 
 void updateClientList(int pid);
 
-void *client(void *ptr);
+void *clientCommandProcessor(void *ptr);
 
-void *connection(void *ptr);
+void *userInput2Server(void *ptr);
 
-void *inputHandler(void *ptr);
+void *ServerInput2Client(void *ptr);
+
+void *clientInput2Server(void *clientID);
 
 struct clients {
     int clientID = -1;
@@ -57,7 +55,7 @@ struct clients {
 
 std::string processList[50][6];
 std::string KDC[50][2];
-int noOfUsers = -1;
+int noOfUsers = 0;
 int currentListIndex = 0;
 int activeProcesses = 0;
 int write2CH[2];
@@ -81,16 +79,16 @@ int main() {
         write(STDOUT_FILENO, "sig error", 9);
     }
     pthread_t inputThread;
+    pthread_t clientInputThread[10];
     int inputID;
 
     createSock();
     listen(sock, 5);
     write(STDOUT_FILENO, "Accepting Connections Now\n", 26);
-    inputID = pthread_create(&inputThread, nullptr, connection, (void *) nullptr);
+    inputID = pthread_create(&inputThread, nullptr, userInput2Server, (void *) nullptr);
     struct sockaddr_in addr;
     socklen_t client_addr_size = sizeof(struct sockaddr_in);
     int clientHandlerPID;
-
     while (true) {
         msgsock = accept(sock, (struct sockaddr *) &addr, &client_addr_size);
         if (msgsock != -1) {
@@ -99,7 +97,6 @@ int main() {
             activeClients++;
             int checkPipe = pipe(write2CH);
             int checkPipe2 = pipe(write2CON);
-
             clientsList[currentClientIndex].clientID = currentClientIndex + 1;
             clientsList[currentClientIndex].readingEnd = write2CON[0];
             clientsList[currentClientIndex].writingEnd = write2CH[1];
@@ -108,19 +105,27 @@ int main() {
             clientsList[currentClientIndex].status = "Connected";
             ip = inet_ntoa(addr.sin_addr);
 
-            clientHandlerPID = fork();
+            int *arg = static_cast<int *>(malloc(sizeof(*arg)));
+            if (arg == NULL) {
+                fprintf(stderr, "Couldn't allocate memory for thread arg.\n");
+                exit(EXIT_FAILURE);
+            }
 
+            *arg = currentClientIndex;
+            pthread_create(&clientInputThread[currentClientIndex], nullptr, clientInput2Server, arg);
+
+            clientHandlerPID = fork();
             if (clientHandlerPID == 0) {
                 pthread_t clientHThread;
                 pthread_t inputHThread;
                 int clientHID;
                 int inputHID;
 
-                clientHID = pthread_create(&clientHThread, nullptr, client, (void *) nullptr);
-                inputHID = pthread_create(&inputHThread, nullptr, inputHandler, (void *) nullptr);
+                clientHID = pthread_create(&clientHThread, nullptr, clientCommandProcessor, (void *) nullptr);
+//                inputHID = pthread_create(&inputHThread, nullptr, ServerInput2Client, (void *) nullptr);
 
                 pthread_join(clientHThread, nullptr);
-                pthread_join(inputHThread, nullptr);
+//                pthread_join(inputHThread, nullptr);
             }
         } else {
             write(STDOUT_FILENO, "Connection fail\n", 16);
@@ -128,6 +133,9 @@ int main() {
         clientsList[currentClientIndex].pid = clientHandlerPID;
     }
     pthread_join(inputThread, nullptr);
+    for (int i = 0; i < currentClientIndex; ++i) {
+        pthread_join(clientInputThread[i], nullptr);
+    }
     return 0;
 }
 
@@ -164,10 +172,10 @@ void createSock() {
     fflush(stdout);
 }
 
-//run processes on client's command
-int bindUserIP(char *username) {
-
-}
+//run processes on clientCommandProcessor's command
+//int bindUserIP(char *username) {
+//
+//}
 
 //method to get current time
 std::string getTime() {
@@ -219,20 +227,28 @@ std::string elapsedTime(std::string startTime, std::string endTime) {
 }
 
 
-//operation setter for client handler
+//operation setter for clientCommandProcessor handler
 int setOperation(char *operationText) {
     int operation;
-    if (strcmp(operationText, "print") == 0) {
-        operation = 8;
-    } else if (strcmp(operationText, "exit") == 0) {
+    if (strcmp(operationText, "exit") == 0) {
         operation = 0;
+    } else if (strcmp(operationText, "register") == 0) {
+        operation = 1;
+    } else if (strcmp(operationText, "messaging") == 0) {
+        operation = 2;
+    } else if (strcmp(operationText, "connect") == 0) {
+        operation = 3;
+    } else if (strcmp(operationText, "message") == 0) {
+        operation = 4;
+    } else if (strcmp(operationText, "disconnect") == 0) {
+        operation = 5;
     } else {
         operation = -1;
     }
     return operation;
 }
 
-//operation setter for input handler and input thread
+//operation setter for ServerInput2Client
 int setOperationInput(char *operationText) {
     int operation;
     if (strcmp(operationText, "register") == 0) {
@@ -251,7 +267,7 @@ int setOperationInput(char *operationText) {
     return operation;
 }
 
-//for handling client handler exits
+//for handling clientCommandProcessor handler exits
 void signal_handler_CONH(int signo) {
     if (signo == SIGCHLD) {
         int status;
@@ -281,20 +297,24 @@ void signal_handler_CONHEXIT(int signo) {
     }
 }
 
-int registerUser(char *username, char *publicKey) {
-    for (int i = 0; i < noOfUsers; ++i) {
-        if (strcmp(username, KDC[i][0].c_str()) != 0 || strcmp(publicKey, KDC[i][1].c_str()) != 0) {
+int registerUser(char* username, char* publicKey) {
+    write(STDOUT_FILENO, "RU1 \n", 5);
+    for (int i = 0; i < noOfUsers; i++) {
+        if (strcmp(username, KDC[i][0].c_str()) == 0 || strcmp(publicKey, KDC[i][1].c_str()) == 0) {
             return -1;
         }
     }
+    write(STDOUT_FILENO, "RU2 \n", 5);
     noOfUsers++;
-    KDC[noOfUsers][0] = username;
-    KDC[noOfUsers][1] = publicKey;
+    std::string user(username);
+    std::string key(publicKey);
+    KDC[noOfUsers][0] = user;
+    KDC[noOfUsers][1] = key;
     return 0;
 }
 
-//client handler thread
-void *client(void *ptr) {
+//clientCommandProcessor handler thread
+void *clientCommandProcessor(void *ptr) {
     char inputText[500];
     char outputText[500];
     bool continueInput = true;
@@ -302,10 +322,6 @@ void *client(void *ptr) {
     int operation = -1;
     char *token;
 
-
-    if (signal(SIGCHLD, signal_handler_CH) == SIG_ERR) {
-        write(STDOUT_FILENO, "sig error", 9);
-    }
 
     write(msgsock, "Commands: kill <pid>, list, run <process> <path(optional)>, "
                    "add/div/sub/mul <list of numbers separated by spaces>\nInput exit to terminate:\n"
@@ -339,7 +355,6 @@ void *client(void *ptr) {
             write(msgsock, "exit\0", 5);
             close(sock);
             close(msgsock);
-            killAllProcess();
             wait(status);
             kill(getpid(), SIGTERM);
         }
@@ -357,67 +372,73 @@ void *client(void *ptr) {
             if (username == nullptr || publicKey == nullptr) {
                 write(msgsock, "Invalid Command. Input next command\n", 36);
             } else {
-                int registerCheck = registerUser(username, publicKey);
-                if (registerCheck == -1) {
-                    write(msgsock, "User already exists. Registration failed. Please try again.", 59);
-                } else if (registerCheck == 0) {
-                    write(msgsock, "Registration Successful\n", 24);
-                }
+                string registerCommand = "register ";
+                registerCommand.append(username).append(" ").append(publicKey);
+                int count = sprintf(outputText, "%s", registerCommand.c_str());
+
+                write(STDOUT_FILENO, outputText, count);
+                write(STDOUT_FILENO, "CCP 1\n", 6);
+                write(write2CON[1], outputText, count);
+                write(STDOUT_FILENO, "CCP 2\n", 6);
+                count = read(write2CH[0], outputText, 1000);
+                write(STDOUT_FILENO, "CCP 3\n", 6);
+                write(msgsock, outputText, count);
+                write(STDOUT_FILENO, "CCP 4\n", 6);
             }
         }
 
-            //run
-        else if (operation == 2) {
-            char *username;
-            username = strtok(nullptr, " ");
-            if (username != nullptr) {
-                int checkBinding = bindUserIP(username);
-            } else {
-                write(msgsock, "Input next command\n", 19);
-            }
-        }
+//        //bindIP
+//        else if (operation == 2) {
+//            char *username;
+//            username = strtok(nullptr, " ");
+//            if (username != nullptr) {
+//                int checkBinding = bindUserIP(username);
+//            } else {
+//                write(msgsock, "Input next command\n", 19);
+//            }
+//        }
 
-            //list
-        else if (operation == 7) {
-            char output[500];
-            std::string print;
-            if (currentListIndex == 0) {
-                write(msgsock, "No processes\nInput next command\n", 32);
-            } else {
-                print.append("Process PID\tProcess Name\tStatus\t\tStart Time\t\tEnd Time\t\tElapsed Time\n");
-                for (int i = 0; i < currentListIndex; ++i) {
-                    for (int j = 0; j < 6; ++j) {
-                        print.append(processList[i][j]).append("\t\t");
-                    }
-                    print.append("\n");
-                }
-                int read = sprintf(output, "%s", print.c_str());
-                sprintf(&output[read - 1], "%s", "\nInput next command\n");
-                int count = read + 20;
-                write(msgsock, output, count);
-            }
-        }
+//        //list
+//        else if (operation == 7) {
+//            char output[500];
+//            std::string print;
+//            if (currentListIndex == 0) {
+//                write(msgsock, "No processes\nInput next command\n", 32);
+//            } else {
+//                print.append("Process PID\tProcess Name\tStatus\t\tStart Time\t\tEnd Time\t\tElapsed Time\n");
+//                for (int i = 0; i < currentListIndex; ++i) {
+//                    for (int j = 0; j < 6; ++j) {
+//                        print.append(processList[i][j]).append("\t\t");
+//                    }
+//                    print.append("\n");
+//                }
+//                int read = sprintf(output, "%s", print.c_str());
+//                sprintf(&output[read - 1], "%s", "\nInput next command\n");
+//                int count = read + 20;
+//                write(msgsock, output, count);
+//            }
+//        }
 
-            //print
-        else if (operation == 8) {
-            token = strtok(nullptr, " ");
-            char messageBuffer[500];
-            std::string print;
-            print.append("Message from ").append(ip).append(": ");
-            while (token != nullptr) {
-                print.append(token).append(" ");
-                token = strtok(nullptr, " ");
-            }
-            print.append("\n").append("Input next command\n");
-            int read = sprintf(messageBuffer, "%s", print.c_str());
-            write(STDOUT_FILENO, messageBuffer, read);
-            write(msgsock, "Input next command\n", 19);
-        }
+//         //print
+//        else if (operation == 8) {
+//            token = strtok(nullptr, " ");
+//            char messageBuffer[500];
+//            std::string print;
+//            print.append("Message from ").append(ip).append(": ");
+//            while (token != nullptr) {
+//                print.append(token).append(" ");
+//                token = strtok(nullptr, " ");
+//            }
+//            print.append("\n").append("Input next command\n");
+//            int read = sprintf(messageBuffer, "%s", print.c_str());
+//            write(STDOUT_FILENO, messageBuffer, read);
+//            write(msgsock, "Input next command\n", 19);
     }
+    return nullptr;
 }
 
 //Input Thread
-void *connection(void *ptr) {
+void *userInput2Server(void *ptr) {
     char input[1000];
     char saveOperator[10];
     int operation = -1;
@@ -442,7 +463,7 @@ void *connection(void *ptr) {
                 write(STDOUT_FILENO, "Invalid Command\n", 16);
             }
 
-                //print to single client
+                //print to single clientCommandProcessor
             else if (operation == 3) {
                 if (activeClients == 0) {
                     write(STDOUT_FILENO, "No Client Connected\n", 20);
@@ -489,7 +510,7 @@ void *connection(void *ptr) {
                 }
             }
 
-                //print client list
+                //print clientCommandProcessor list
             else if (operation == 4) {
                 char output[1000];
                 if (currentClientIndex == -1) {
@@ -527,7 +548,7 @@ void *connection(void *ptr) {
     }
 }
 
-//update client list on disconnects
+//update clientCommandProcessor list on disconnects
 void updateClientList(int pid) {
     int index = -1;
     for (int client = 0; client <= currentClientIndex; ++client) {
@@ -546,7 +567,7 @@ void updateClientList(int pid) {
 }
 
 //Input handler thread
-void *inputHandler(void *ptr) {
+void *ServerInput2Client(void *ptr) {
     char input[1000];
     char output[1000];
     char saveOperator[10];
@@ -555,15 +576,15 @@ void *inputHandler(void *ptr) {
     int checkRead;
 
     while (true) {
+        write(STDOUT_FILENO, "SI2C 1\n", 7);
         checkRead = read(write2CH[0], input, 1000);//B2//B4
+        write(STDOUT_FILENO, "SI2C 2\n", 7);
         input[checkRead - 1] = '\0';//adding null at the end
 
         token = strtok(input, " ");
         sscanf(token, "%s", saveOperator);
         operation = setOperationInput(saveOperator);
 
-
-        //printing to client
         if (operation == 1 || operation == 3) {
             std::string print;
             token = strtok(nullptr, " ");
@@ -594,13 +615,64 @@ void *inputHandler(void *ptr) {
             }
         }
 
-            //closing the client handler on server exit
+            //closing the clientCommandProcessor handler on server exit
         else if (operation == 5) {
             int *status = nullptr;
             write(msgsock, "exit\0", 5);
             close(sock);
             close(msgsock);
-            killAllProcess();
+            wait(status);
+            exit(getpid());
+        }
+    }
+}
+
+void *clientInput2Server(void *clientID) {
+    char input[1000];
+    char output[1000];
+    char saveOperator[10];
+    int operation = -1;
+    char *token;
+    int checkRead;
+
+    while (true) {
+        int CID = *((int *) clientID);
+        write(STDOUT_FILENO, "CIS 1\n", 6);
+        checkRead = read(clientsList[CID].readingEnd, input, 1000);//B2//B4
+        write(STDOUT_FILENO, input, checkRead);
+        write(STDOUT_FILENO, "CIS 2\n", 6);
+        input[checkRead - 1] = '\0';//adding null at the end
+        write(STDOUT_FILENO, "CIS 3\n", 6);
+        token = strtok(input, " ");
+        sscanf(token, "%s", saveOperator);
+        operation = setOperationInput(saveOperator);
+        write(STDOUT_FILENO, "CIS 4\n", 6);
+        //register
+        if (operation == 1) {
+            char *username;
+            char *publicKey;
+            username = strtok(nullptr, " ");
+            publicKey = strtok(nullptr, " ");
+            write(STDOUT_FILENO, "CIS 5\n", 6);
+            int registerCheck = registerUser(username, publicKey);
+            write(STDOUT_FILENO, "CIS 6\n", 6);
+            if (registerCheck == -1) {
+                write(STDOUT_FILENO, "CIS 7\n", 6);
+                write(clientsList[CID].writingEnd, "User already exists. Registration failed. Please try again.", 59);
+                write(STDOUT_FILENO, "CIS 8\n", 6);
+            } else if (registerCheck == 0) {
+                write(STDOUT_FILENO, "CIS 9\n", 6);
+                write(clientsList[CID].writingEnd, "Registration Successful\n", 24);
+                write(STDOUT_FILENO, "CIS 10\n", 6);
+            }
+        }
+
+            //closing the clientCommandProcessor handler on server exit
+        else if (operation == 5) {
+            int *status = nullptr;
+            write(msgsock, "exit\0", 5);
+            close(sock);
+            close(msgsock);
             wait(status);
             exit(getpid());
         }
