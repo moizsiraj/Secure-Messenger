@@ -30,7 +30,7 @@ void createSock();
 
 long diffieHellman(long G, long P, long A, long B);
 
-int registerUser(char *username, char *publicKey);
+int registerUser(char *username, char *publicKey, char *privateKey);
 
 int bindUserIP(char *username);
 
@@ -60,7 +60,7 @@ struct clients {
     std::string status;
 };
 
-string KDC[50][2];
+string KDC[50][3];
 string UIP[50][2];
 string connections[25][2];
 int noOfUsers = 0;
@@ -299,17 +299,20 @@ void signal_handler_CONHEXIT(int signo) {
     }
 }
 
-int registerUser(char *username, char *publicKey) {
+int registerUser(char *username, char *publicKey, char *privateKey) {
     std::string user(username);
     char out[10];
     for (int i = 0; i < noOfUsers; i++) {
-        if (strcmp(user.c_str(), KDC[i][0].c_str()) == 0 || strcmp(publicKey, KDC[i][1].c_str()) == 0) {
+        if (strcmp(user.c_str(), KDC[i][0].c_str()) == 0 || strcmp(publicKey, KDC[i][1].c_str()) == 0 ||
+            strcmp(publicKey, KDC[i][2].c_str()) == 0) {
             return -1;
         }
     }
     std::string key(publicKey);
+    std::string privKey(publicKey);
     KDC[noOfUsers][0] = user;
     KDC[noOfUsers][1] = key;
+    KDC[noOfUsers][2] = privKey;
     noOfUsers++;
     return 0;
 }
@@ -343,12 +346,10 @@ void *clientCommandProcessor(void *ptr) {
             write(msgsock, "Input next command\n", 19);
             continue;
         }
-
         //getting the first token to set operation
         token = strtok(inputText, " ");
         sscanf(token, "%s", saveOperator);
         operation = setOperation(saveOperator);
-
         //exit
         if (operation == 0) {
             continueInput = false;
@@ -359,7 +360,6 @@ void *clientCommandProcessor(void *ptr) {
             wait(status);
             kill(getpid(), SIGTERM);
         }
-
             //invalid input
         else if (operation == -1) {
             write(msgsock, "Invalid command.\nInput next command\n", 36);
@@ -368,20 +368,21 @@ void *clientCommandProcessor(void *ptr) {
         else if (operation == 1) {
             char *username;
             char *publicKey;
+            char *privateKey;
             username = strtok(nullptr, " ");
             publicKey = strtok(nullptr, " ");
-            if (username == nullptr || publicKey == nullptr) {
+            privateKey = strtok(nullptr, " ");
+            if (username == nullptr || publicKey == nullptr || privateKey == nullptr) {
                 write(msgsock, "Invalid Command. Input next command\n", 36);
             } else {
                 string registerCommand = "register ";
-                registerCommand.append(username).append(" ").append(publicKey);
+                registerCommand.append(username).append(" ").append(publicKey).append(" ").append(privateKey);
                 int count = sprintf(outputText, "%s", registerCommand.c_str());
                 write(write2CON[1], outputText, count);
                 count = read(write2CH[0], outputText, 1000);
                 write(msgsock, outputText, count);
             }
         }
-
             //bindIP
         else if (operation == 2) {
             char *username;
@@ -397,7 +398,6 @@ void *clientCommandProcessor(void *ptr) {
                 write(msgsock, outputText, count);
             }
         }
-
             //connect
         else if (operation == 3) {
             char *username;
@@ -567,9 +567,11 @@ void *clientInput2Server(void *clientID) {
         if (operation == 1) {
             char *username;
             char *publicKey;
+            char *privateKey;
             username = strtok(nullptr, " ");
             publicKey = strtok(nullptr, " ");
-            int registerCheck = registerUser(username, publicKey);
+            privateKey = strtok(nullptr, " ");
+            int registerCheck = registerUser(username, publicKey, privateKey);
             if (registerCheck == -1) {
                 write(clientsList[CID].writingEnd, "User already exists. Registration failed. Please try again.", 59);
             } else if (registerCheck == 0) {
@@ -628,6 +630,8 @@ int connectUser(char *username, string currentUser) {
         }
         char o[10];
         long sessionKey = diffieHellman(DFHLG, DFHLP, atoi(KDC[indexA][1].c_str()), atoi(KDC[indexB][1].c_str()));
+        string messageA = to_string(sessionKey).append(" ").append(KDC[indexA][0]).append(" ");
+        string messageB = to_string(sessionKey).append(" ").append(KDC[indexB][0]).append(" ");
         return 1;
     } else {
         return 0;
@@ -659,3 +663,5 @@ long diffieHellman(long G, long P, long A, long B) {
     long K = X % P;
     return K;
 }
+
+
