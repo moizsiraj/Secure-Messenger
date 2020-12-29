@@ -285,9 +285,9 @@ int setOperation(char *operationText) {
 //operation setter for input handler and input thread
 int setOperationInput(char *operationText) {
     int operation;
-   if (strcmp(operationText, "print") == 0) {
-        operation = 3;
-    } else if (strcmp(operationText, "exit") == 0) {
+   if (strcmp(operationText, "register") == 0) {
+        operation = 1;
+    } else if (strcmp(operationText, "messaging") == 0) {
         operation = 5;
     } else {
         operation = -1;
