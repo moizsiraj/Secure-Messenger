@@ -301,25 +301,13 @@ void signal_handler_CONHEXIT(int signo) {
 
 int registerUser(char *username, char *publicKey) {
     std::string user(username);
-    write(STDOUT_FILENO, "RU1 \n", 5);
     char out[10];
     for (int i = 0; i < noOfUsers; i++) {
-        int count = sprintf(out, "%s", user.c_str());
-        write(STDOUT_FILENO, out, count);
-        count = sprintf(out, "%s", KDC[i][0].c_str());
-        write(STDOUT_FILENO, out, count);
-        write(STDOUT_FILENO, "RU3 \n", 5);
         if (strcmp(user.c_str(), KDC[i][0].c_str()) == 0 || strcmp(publicKey, KDC[i][1].c_str()) == 0) {
             return -1;
         }
     }
-    write(STDOUT_FILENO, "RU2 \n", 5);
-
-    char o[10];
-    int count = sprintf(o, "%s\n", to_string(noOfUsers).c_str());
-    write(STDOUT_FILENO, o, count);
     std::string key(publicKey);
-
     KDC[noOfUsers][0] = user;
     KDC[noOfUsers][1] = key;
     noOfUsers++;
@@ -388,15 +376,9 @@ void *clientCommandProcessor(void *ptr) {
                 string registerCommand = "register ";
                 registerCommand.append(username).append(" ").append(publicKey);
                 int count = sprintf(outputText, "%s", registerCommand.c_str());
-
-                write(STDOUT_FILENO, outputText, count);
-                write(STDOUT_FILENO, "CCP 1\n", 6);
                 write(write2CON[1], outputText, count);
-                write(STDOUT_FILENO, "CCP 2\n", 6);
                 count = read(write2CH[0], outputText, 1000);
-                write(STDOUT_FILENO, "CCP 3\n", 6);
                 write(msgsock, outputText, count);
-                write(STDOUT_FILENO, "CCP 4\n", 6);
             }
         }
 
@@ -410,14 +392,9 @@ void *clientCommandProcessor(void *ptr) {
                 string registerCommand = "messaging ";
                 registerCommand.append(username);
                 int count = sprintf(outputText, "%s", registerCommand.c_str());
-                write(STDOUT_FILENO, outputText, count);
-                write(STDOUT_FILENO, "CCP 1\n", 6);
                 write(write2CON[1], outputText, count);
-                write(STDOUT_FILENO, "CCP 2\n", 6);
                 count = read(write2CH[0], outputText, 1000);
-                write(STDOUT_FILENO, "CCP 3\n", 6);
                 write(msgsock, outputText, count);
-                write(STDOUT_FILENO, "CCP 4\n", 6);
             }
         }
 
@@ -431,14 +408,9 @@ void *clientCommandProcessor(void *ptr) {
                 string registerCommand = "connect ";
                 registerCommand.append(username);
                 int count = sprintf(outputText, "%s", registerCommand.c_str());
-                write(STDOUT_FILENO, outputText, count);
-                write(STDOUT_FILENO, "CCP 1\n", 6);
                 write(write2CON[1], outputText, count);
-                write(STDOUT_FILENO, "CCP 2\n", 6);
                 count = read(write2CH[0], outputText, 1000);
-                write(STDOUT_FILENO, "CCP 3\n", 6);
                 write(msgsock, outputText, count);
-                write(STDOUT_FILENO, "CCP 4\n", 6);
             }
         }
     }
@@ -586,65 +558,42 @@ void *clientInput2Server(void *clientID) {
 
     while (true) {
         int CID = *((int *) clientID);
-        write(STDOUT_FILENO, "CIS 1\n", 6);
         checkRead = read(clientsList[CID].readingEnd, input, 1000);//B2//B4
-        write(STDOUT_FILENO, input, checkRead);
-        write(STDOUT_FILENO, "CIS 2\n", 6);
         input[checkRead] = '\0';//adding null at the end
-        write(STDOUT_FILENO, "CIS 3\n", 6);
         token = strtok(input, " ");
         sscanf(token, "%s", saveOperator);
         operation = setOperationInput(saveOperator);
-        write(STDOUT_FILENO, "CIS 4\n", 6);
         //register
         if (operation == 1) {
             char *username;
             char *publicKey;
             username = strtok(nullptr, " ");
             publicKey = strtok(nullptr, " ");
-            write(STDOUT_FILENO, "CIS 5\n", 6);
             int registerCheck = registerUser(username, publicKey);
-            write(STDOUT_FILENO, "CIS 6\n", 6);
             if (registerCheck == -1) {
-                write(STDOUT_FILENO, "CIS 7\n", 6);
                 write(clientsList[CID].writingEnd, "User already exists. Registration failed. Please try again.", 59);
-                write(STDOUT_FILENO, "CIS 8\n", 6);
             } else if (registerCheck == 0) {
-                write(STDOUT_FILENO, "CIS 9\n", 6);
                 write(clientsList[CID].writingEnd, "Registration Successful\n", 24);
-                write(STDOUT_FILENO, "CIS 10\n", 6);
             }
         } else if (operation == 2) {
             char *username;
             username = strtok(nullptr, " ");
-            write(STDOUT_FILENO, "CIS 5\n", 6);
             int bindCheck = bindIP(username, clientsList[CID].ip);
-            write(STDOUT_FILENO, "CIS 6\n", 6);
             if (bindCheck == 1) {
                 std::string user(username);
                 currentUser = user;
-                write(STDOUT_FILENO, "CIS 7\n", 6);
                 write(clientsList[CID].writingEnd, "Connection Successful.\nInput next command\n", 42);
-                write(STDOUT_FILENO, "CIS 8\n", 6);
             } else if (bindCheck == 0) {
-                write(STDOUT_FILENO, "CIS 9\n", 6);
                 write(clientsList[CID].writingEnd, "User Doesn't Exist.\nInput next command\n", 39);
-                write(STDOUT_FILENO, "CIS 10\n", 6);
             }
         } else if (operation == 3) {
             char *username;
             username = strtok(nullptr, " ");
-            write(STDOUT_FILENO, "CIS 5\n", 6);
             int connectCheck = connectUser(username, currentUser);
-            write(STDOUT_FILENO, "CIS 6\n", 6);
             if (connectCheck == 1) {
-                write(STDOUT_FILENO, "CIS 7\n", 6);
                 write(clientsList[CID].writingEnd, "Connection Successful.\nInput next command\n", 42);
-                write(STDOUT_FILENO, "CIS 8\n", 6);
             } else if (connectCheck == 0) {
-                write(STDOUT_FILENO, "CIS 9\n", 6);
                 write(clientsList[CID].writingEnd, "User Doesn't Exist.\nInput next command\n", 39);
-                write(STDOUT_FILENO, "CIS 10\n", 6);
             }
         }//closing the clientCommandProcessor handler on server exit
         else if (operation == 6) {
@@ -660,10 +609,8 @@ void *clientInput2Server(void *clientID) {
 
 int connectUser(char *username, string currentUser) {
     std::string user(username);
-    char out[10];
     int indexB;
     int indexA = 0;
-    write(STDOUT_FILENO, "RU1 \n", 5);
     bool exist = false;
     for (int i = 0; i < noOfUsers; i++) {
         if (strcmp(user.c_str(), KDC[i][0].c_str()) == 0) {
@@ -681,7 +628,6 @@ int connectUser(char *username, string currentUser) {
         }
         char o[10];
         long sessionKey = diffieHellman(DFHLG, DFHLP, atoi(KDC[indexA][1].c_str()), atoi(KDC[indexB][1].c_str()));
-
         return 1;
     } else {
         return 0;
@@ -690,9 +636,6 @@ int connectUser(char *username, string currentUser) {
 
 int bindIP(char *username, string IP) {
     std::string user(username);
-    char out[10];
-    write(STDOUT_FILENO, "RU1 \n", 5);
-
     bool exist = false;
     for (int i = 0; i < noOfUsers; i++) {
         if (strcmp(user.c_str(), KDC[i][0].c_str()) == 0) {
@@ -708,29 +651,11 @@ int bindIP(char *username, string IP) {
     } else {
         return 0;
     }
-
 }
 
 long diffieHellman(long G, long P, long A, long B) {
-    int count = sprintf(o, "\n%ld G\n", G);
-    write(STDOUT_FILENO, o, count);
-    count = sprintf(o, "\n%ld P\n", P);
-    write(STDOUT_FILENO, o, count);
-    count = sprintf(o, "\n%ld A\n", A);
-    write(STDOUT_FILENO, o, count);
-    count = sprintf(o, "\n%ld B\n", B);
-    write(STDOUT_FILENO, o, count);
-    long AS = (long) pow(G, A) % P;
-    count = sprintf(o, "\n%ld AS\n", AS);
-    write(STDOUT_FILENO, o, count);
     long BS = (long) pow(G, B) % P;
-    count = sprintf(o, "\n%ld BS\n", BS);
-    write(STDOUT_FILENO, o, count);
     long X = (long) pow(BS, A);
-    count = sprintf(o, "\n%ld X\n", X);
-    write(STDOUT_FILENO, o, count);
     long K = X % P;
-    count = sprintf(o, "\n%ld K\n", K);
-    write(STDOUT_FILENO, o, count);
-    long K;
+    return K;
 }
