@@ -283,6 +283,104 @@ class DES {
         }
     }
 
+    void getAuxMessagesDecrypt(string message) {
+        string *messageSplit = splitMessage(message);
+        auxMessage[0][0] = messageSplit[0];
+        auxMessage[0][1] = messageSplit[1];
+        for (int i = 1, j = 16; i <= 16 && j >= 1; i++, j--) {
+            auxMessage[i][0] = auxMessage[i - 1][1];
+            getRightDecrypt(i, j);
+        }
+    }
+
+    void getRightDecrypt(int index, int indexKey) {
+        long Ln_1 = stol(auxMessage[index - 1][0], nullptr, 2);
+        string function = funcDecrypt(index, indexKey);
+        long functionToBin = stol(function, nullptr, 2);
+        long valueBin = Ln_1 ^functionToBin;
+        std::string valueStr = std::bitset<32>(valueBin).to_string();
+        auxMessage[index][1] = valueStr;
+    }
+
+    string funcDecrypt(int index, int indexKey) {
+        string returnstring;
+        string e_Rn_1;
+        for (int i = 0; i < 48; i++) {
+            char binChar = auxMessage[index - 1][1].at(selection[i] - 1);
+            e_Rn_1.push_back((binChar));
+        }
+        long dec_e_Rn_1 = stol(e_Rn_1, nullptr, 2);
+        long dec_key = stol(keys[indexKey], nullptr, 2);
+        long Xor = dec_e_Rn_1 ^dec_key;
+        std::string binary = std::bitset<48>(Xor).to_string();
+        string binStore[8];
+        int start = 0;
+        int end = 6;
+        for (int i = 0; i < 8; i++) {
+            binStore[i] = binary.substr(start, end);
+            start = start + 6;
+        }
+        for (int i = 0; i < 8; i++) {
+            string rowStr;
+            string tempStr = binStore[i];
+            rowStr.push_back((tempStr.at(0)));
+            rowStr.push_back(tempStr.at(5));
+            int row = stoi(rowStr, nullptr, 2);
+            string columnStr = tempStr.substr(1, 4);
+            int column = stoi(columnStr, nullptr, 2);
+            int value;
+            string binValue;
+            switch (i) {
+                case 0:
+                    value = S1[row][column];
+                    binValue = std::bitset<4>(value).to_string();
+                    returnstring.append(binValue);
+                    break;
+                case 1:
+                    value = S2[row][column];
+                    binValue = std::bitset<4>(value).to_string();
+                    returnstring.append(binValue);
+                    break;
+                case 2:
+                    value = S3[row][column];
+                    binValue = std::bitset<4>(value).to_string();
+                    returnstring.append(binValue);
+                    break;
+                case 3:
+                    value = S4[row][column];
+                    binValue = std::bitset<4>(value).to_string();
+                    returnstring.append(binValue);
+                    break;
+                case 4:
+                    value = S5[row][column];
+                    binValue = std::bitset<4>(value).to_string();
+                    returnstring.append(binValue);
+                    break;
+                case 5:
+                    value = S6[row][column];
+                    binValue = std::bitset<4>(value).to_string();
+                    returnstring.append(binValue);
+                    break;
+                case 6:
+                    value = S7[row][column];
+                    binValue = std::bitset<4>(value).to_string();
+                    returnstring.append(binValue);
+                    break;
+                case 7:
+                    value = S8[row][column];
+                    binValue = std::bitset<4>(value).to_string();
+                    returnstring.append(binValue);
+                    break;
+            }
+        }
+        string pTableInput = returnstring;
+        string pTableOutput;
+        for (int i = 0; i < 32; i++) {
+            pTableOutput.push_back((pTableInput.at(p[i] - 1)));
+        }
+        return pTableOutput;
+    }
+
     string getEncodedMessage() {
         string RL;
         RL.append(auxMessage[16][1]).append(auxMessage[16][0]);
@@ -299,7 +397,7 @@ class DES {
 
     void getRight(int index) {
         long Ln_1 = stol(auxMessage[index - 1][0], nullptr, 2);
-        string function = func(index);//buggy
+        string function = func(index);
         long functionToBin = stol(function, nullptr, 2);
         long valueBin = Ln_1 ^functionToBin;
         std::string valueStr = std::bitset<32>(valueBin).to_string();
@@ -385,22 +483,27 @@ class DES {
         return pTableOutput;
     }
 
-public: string runDES(string message, string key) {
+public:
+    string runDES(string message, string key, bool decrypt) {
         string permutedKey = permuteKey(key);
         getAuxKeys(permutedKey);
         getFinalKeys();
         string permutedMessage = initialPermute(message);
-        getAuxMessages(permutedMessage);
+        if (decrypt) {
+            getAuxMessagesDecrypt(permutedMessage);
+        } else {
+            getAuxMessages(permutedMessage);
+        }
         string encodedMessage = getEncodedMessage();
         return encodedMessage;
+
     }
 };
 
-int main(){
+int main() {
     DES d;
-    string encrypt = d.runDES("0123456789ABCDEF", "133457799BBCDFF1");
-    string decrypt = d.runDES(encrypt, "133457799BBCDFF1");
+    string encrypt = d.runDES("0123456789ABCDEF", "133457799BBCDFF1", false);
+    string decrypt = d.runDES(encrypt, "133457799BBCDFF1", true);
     printf("%s", encrypt.c_str());
     printf("%s", decrypt.c_str());
-
 }
