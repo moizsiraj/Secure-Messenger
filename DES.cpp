@@ -4,7 +4,6 @@
 #include <bitset>
 
 using namespace std;
-namespace mp = boost::multiprecision;
 
 class DES {
 
@@ -291,10 +290,10 @@ class DES {
             char binChar = RL.at(ip_inv[j] - 1);
             finalStr.push_back((binChar));
         }
-        stringstream ss;
+        stringstream hexStr;
         bitset<64> set(finalStr);
-        ss << hex << set.to_ulong() << endl;
-        return ss.str();
+        hexStr << hex << set.to_ulong() << endl;
+        return hexStr.str();
     }
 
     void getRight(int index) {
