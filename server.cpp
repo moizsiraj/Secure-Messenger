@@ -294,8 +294,7 @@ int setOperationServer(char *operationText) {
     int operation;
     if (strcmp(operationText, "request") == 0) {
         operation = 1;
-    }
-    else if (strcmp(operationText, "message") == 0) {
+    } else if (strcmp(operationText, "message") == 0) {
         operation = 2;
     } else {
         operation = -1;
@@ -558,7 +557,8 @@ void *clientHandler(void *clientID) {
             username = strtok(nullptr, " ");
             char *connectCheck = connectUser(username, currentUser, o);
             if (connectCheck != nullptr) {
-                sprintf(o, "%s", connectCheck);
+                int count = sprintf(o, "%s", connectCheck);
+                write(STDOUT_FILENO, o, count);
 //                DES decrypt;
 //                char check[1000];
 //                sscanf(o, "%s", check);
@@ -572,8 +572,14 @@ void *clientHandler(void *clientID) {
 //                string keyPartD = decrypt.runDES(keyPartE, privKey, true);
 //                string keyPartT = hex2str(keyPartD);
 //                string toSend = seglist.at(1);//B's part
+//                string print;
+//                print.append(keyPartE).append(" ").append(keyPartD).append(" ").append(keyPartT).append(" ").append(
+//                        toSend);
+//                char y[1000];
+//                count = sprintf(y, "%s", print.c_str());
+//                write(STDOUT_FILENO, y, count);
                 int cid = findCID(username);
-//
+                write(STDOUT_FILENO, "check1\n", 7);
 //                std::stringstream test2(keyPartT);
 //                std::string segment2;
 //                std::vector<std::string> seglist2;
@@ -582,7 +588,7 @@ void *clientHandler(void *clientID) {
 //                }
                 char out[1000];
 //                sessionKey = seglist2.at(0);
-//                connections[noOfConnections][0] = currentUser;
+                connections[noOfConnections][0] = currentUser;
                 write(clientsList[cid].serverWritingEnd, "request", 7);//sending B's part
                 read(clientsList[cid].serverReadingEnd, out, 1000);
                 if (strcmp(out, "done") == 0) {
@@ -652,7 +658,8 @@ char *connectUser(char *username, string currentUser, char *output) {
         DES encrypt;
         string packetB = encrypt.runDES(hexB, KDC[indexB][2], false);//done
         string packetA = encrypt.runDES(hexA, KDC[indexA][2], false);
-        string finalMessageA = packetA + ":" + packetB;
+        string finalMessageA;
+        finalMessageA.append(packetA).append(":").append(packetB);
         sprintf(output, "%s", finalMessageA.c_str());
         return output;
     } else {
