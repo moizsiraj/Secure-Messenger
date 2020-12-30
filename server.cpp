@@ -18,6 +18,8 @@ using namespace std;
 
 string str2hex(const string &s);
 
+int findCID(char *username);
+
 string hex2str(string hex);
 
 int setOperation(char *operationText);
@@ -69,8 +71,9 @@ struct clients {
 string KDC[50][3];
 string UIP[50][2];
 string connections[25][2];
-int noOfUsers = 0;
-int noOfConUsers = 0;
+int noOfUsers = 0;//KDC
+int noOfConUsers = 0;//UIP
+int noOfConnections = 0;//connections
 int write2CH[2];
 int write2CON[2];
 int currentClientIndex = -1;
@@ -179,7 +182,6 @@ void createSock() {
     write(STDOUT_FILENO, output, count);
     fflush(stdout);
 }
-
 
 //method to get current time
 std::string getTime() {
@@ -332,7 +334,6 @@ void *clientCommandProcessor(void *ptr) {
     int operation = -1;
     char *token;
 
-
     write(msgsock, "Commands: kill <pid>, list, run <process> <path(optional)>, "
                    "add/div/sub/mul <list of numbers separated by spaces>\nInput exit to terminate:\n"
                    "Please input your command:\n", 166);
@@ -423,7 +424,7 @@ void *clientCommandProcessor(void *ptr) {
     return nullptr;
 }
 
-//Input Thread
+//Input Thread NOT IN USE
 void *userInput2Server(void *ptr) {
     char input[1000];
     char saveOperator[10];
@@ -562,6 +563,7 @@ void *clientInput2Server(void *clientID) {
     string currentUser;
     string privKey;
     string pubKey;
+    string sessionKey;
     int checkRead;
 
     while (true) {
@@ -585,6 +587,7 @@ void *clientInput2Server(void *clientID) {
             } else if (registerCheck == 0) {
                 write(clientsList[CID].writingEnd, "Registration Successful\n", 24);
             }
+            //binding
         } else if (operation == 2) {
             char *username;
             username = strtok(nullptr, " ");
@@ -606,24 +609,50 @@ void *clientInput2Server(void *clientID) {
             } else if (bindCheck == 0) {
                 write(clientsList[CID].writingEnd, "User Doesn't Exist.\nInput next command\n", 39);
             }
+            //connect user
         } else if (operation == 3) {
             char o[1000];
             char *username;
             username = strtok(nullptr, " ");
             char *connectCheck = connectUser(username, currentUser, o);
             if (connectCheck != nullptr) {
-                int count = sprintf(o, "%s", connectCheck);
-//                DES decrypt;
-//                char check[1000];
-//                sscanf(o, "%s", check);
-//                string print = decrypt.runDES(check, privKey);
-//                string pprint = hex2str(print);
-//                count = sprintf(o, "%s", pprint.c_str());
-                write(STDOUT_FILENO, o, count);
+                sprintf(o, "%s", connectCheck);
+                DES decrypt;
+                char check[1000];
+                sscanf(o, "%s", check);
+                std::stringstream test(check);
+                std::string segment;
+                std::vector<std::string> seglist;
+                while (std::getline(test, segment, ':')) {
+                    seglist.push_back(segment);
+                }
+                string keyPartE = seglist.at(0);
+                string keyPartD = decrypt.runDES(keyPartE, privKey, true);
+                string keyPartT = hex2str(keyPartD);
+                string toSend = seglist.at(1);
+                int cid = findCID(username);
+
+                std::stringstream test2(keyPartT);
+                std::string segment2;
+                std::vector<std::string> seglist2;
+                while (std::getline(test, segment2, ':')) {
+                    seglist2.push_back(segment2);
+                }
+                sessionKey = seglist2.at(0);
+                connections[noOfConnections][0] = currentUser;
+                //before making this connection restructure
+                connections[noOfConnections][1] = username;
+
+                char out[1000];
+                int count = sprintf(out, "%s", toSend.c_str());
+                write(clientsList[cid].writingEnd, out, count);//b's part sent to B
                 write(clientsList[CID].writingEnd, "Connection Successful.\nInput next command\n", 42);
             } else {
                 write(clientsList[CID].writingEnd, "User Doesn't Exist.\nInput next command\n", 39);
             }
+        } else if (operation == 7) {
+
+
         }//closing the clientCommandProcessor handler on server exit
         else if (operation == 6) {
             int *status = nullptr;
@@ -634,6 +663,21 @@ void *clientInput2Server(void *clientID) {
             exit(getpid());
         }
     }
+}
+
+int findCID(char *username) {
+    string getIP;
+    for (int i = 0; i < noOfConUsers; ++i) {
+        if (strcmp(username, UIP[i][0].c_str()) == 0) {
+            getIP = UIP[i][1];
+        }
+    }
+    for (int i = 0; i < currentClientIndex; ++i) {
+        if (strcmp(getIP.c_str(), clientsList[i].ip.c_str()) == 0) {
+            return clientsList[i].clientID;
+        }
+    }
+    return -1;
 }
 
 char *connectUser(char *username, string currentUser, char *output) {
