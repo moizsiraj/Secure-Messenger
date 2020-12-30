@@ -385,8 +385,7 @@ class DES {
         return pTableOutput;
     }
 
-public:
-    string runDES(string message, string key) {
+public: string runDES(string message, string key) {
         string permutedKey = permuteKey(key);
         getAuxKeys(permutedKey);
         getFinalKeys();
@@ -396,3 +395,12 @@ public:
         return encodedMessage;
     }
 };
+
+int main(){
+    DES d;
+    string encrypt = d.runDES("0123456789ABCDEF", "133457799BBCDFF1");
+    string decrypt = d.runDES(encrypt, "133457799BBCDFF1");
+    printf("%s", encrypt.c_str());
+    printf("%s", decrypt.c_str());
+
+}
