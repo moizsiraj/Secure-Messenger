@@ -42,17 +42,19 @@ int registerUser(char *username, char *publicKey, char *privateKey);
 
 int bindUserIP(char *username);
 
+int setOperationServer(char *operationText);
+
 int setOperationInput(char *operationText);
 
 void updateClientList(int pid);
 
-void *clientCommandProcessor(void *ptr);
+void *clientReader(void *ptr);
 
-void *userInput2Server(void *ptr);
+[[noreturn]] void *serverReader(void *ptr);
 
 void *ServerInput2Client(void *ptr);
 
-void *clientInput2Server(void *clientID);
+void *clientHandler(void *clientID);
 
 int bindIP(char *username, string IP);
 
@@ -66,6 +68,8 @@ struct clients {
     int msgsock;
     std::string ip;
     std::string status;
+    int serverWritingEnd = -1;
+    int serverReadingEnd = -1;
 };
 
 string KDC[50][3];
@@ -76,6 +80,8 @@ int noOfConUsers = 0;//UIP
 int noOfConnections = 0;//connections
 int write2CH[2];
 int write2CON[2];
+int write2SR[2];
+int readSR[2];
 int currentClientIndex = -1;
 int activeClients = 0;
 int sock;
@@ -103,7 +109,7 @@ int main() {
     createSock();
     listen(sock, 5);
     write(STDOUT_FILENO, "Accepting Connections Now\n", 26);
-    inputID = pthread_create(&inputThread, nullptr, userInput2Server, (void *) nullptr);
+    inputID = pthread_create(&inputThread, nullptr, serverReader, (void *) nullptr);
     struct sockaddr_in addr;
     socklen_t client_addr_size = sizeof(struct sockaddr_in);
     int clientHandlerPID;
@@ -115,12 +121,16 @@ int main() {
             activeClients++;
             int checkPipe = pipe(write2CH);
             int checkPipe2 = pipe(write2CON);
+            pipe(write2SR);
+            pipe(readSR);
             clientsList[currentClientIndex].clientID = currentClientIndex + 1;
             clientsList[currentClientIndex].readingEnd = write2CON[0];
             clientsList[currentClientIndex].writingEnd = write2CH[1];
             clientsList[currentClientIndex].ip = inet_ntoa(addr.sin_addr);
             clientsList[currentClientIndex].msgsock = msgsock;
             clientsList[currentClientIndex].status = "Connected";
+            clientsList[currentClientIndex].serverReadingEnd = readSR[0];
+            clientsList[currentClientIndex].serverWritingEnd = write2SR[1];
             ip = inet_ntoa(addr.sin_addr);
 
             int *arg = static_cast<int *>(malloc(sizeof(*arg)));
@@ -130,13 +140,16 @@ int main() {
             }
 
             *arg = currentClientIndex;
-            pthread_create(&clientInputThread[currentClientIndex], nullptr, clientInput2Server, arg);
+            pthread_create(&clientInputThread[currentClientIndex], nullptr, clientHandler, arg);
 
             clientHandlerPID = fork();
             if (clientHandlerPID == 0) {
-                pthread_t clientHThread;
-                pthread_create(&clientHThread, nullptr, clientCommandProcessor, (void *) nullptr);
-                pthread_join(clientHThread, nullptr);
+                pthread_t CRThread;
+                pthread_t SRThread;
+                pthread_create(&CRThread, nullptr, clientReader, (void *) nullptr);
+                pthread_create(&SRThread, nullptr, serverReader, (void *) nullptr);
+                pthread_join(SRThread, nullptr);
+                pthread_join(CRThread, nullptr);
             }
         } else {
             write(STDOUT_FILENO, "Connection fail\n", 16);
@@ -233,7 +246,7 @@ std::string elapsedTime(std::string startTime, std::string endTime) {
 }
 
 
-//operation setter for clientCommandProcessor handler
+//operation setter for clientReader handler
 int setOperation(char *operationText) {
     int operation;
     if (strcmp(operationText, "exit") == 0) {
@@ -277,7 +290,20 @@ int setOperationInput(char *operationText) {
     return operation;
 }
 
-//for handling clientCommandProcessor handler exits
+int setOperationServer(char *operationText) {
+    int operation;
+    if (strcmp(operationText, "request") == 0) {
+        operation = 1;
+    }
+    else if (strcmp(operationText, "message") == 0) {
+        operation = 2;
+    } else {
+        operation = -1;
+    }
+    return operation;
+}
+
+//for handling clientReader handler exits
 void signal_handler_CONH(int signo) {
     if (signo == SIGCHLD) {
         int status;
@@ -325,8 +351,8 @@ int registerUser(char *username, char *publicKey, char *privateKey) {
     return 0;
 }
 
-//clientCommandProcessor handler thread
-void *clientCommandProcessor(void *ptr) {
+//clientReader handler thread
+void *clientReader(void *ptr) {
     char inputText[500];
     char outputText[500];
     bool continueInput = true;
@@ -424,8 +450,8 @@ void *clientCommandProcessor(void *ptr) {
     return nullptr;
 }
 
-//Input Thread NOT IN USE
-void *userInput2Server(void *ptr) {
+//server reader thread on the child process to take instructions from server
+void *serverReader(void *ptr) {
     char input[1000];
     char saveOperator[10];
     int operation = -1;
@@ -433,109 +459,30 @@ void *userInput2Server(void *ptr) {
     int checkRead;
 
     while (true) {
-        write(STDIN_FILENO, "Input next command\n", 19);
-        checkRead = read(STDIN_FILENO, input, 1000);//B1
-        input[checkRead - 1] = '\0';//adding null at the end
+        write(STDOUT_FILENO, "check11\n", 8);
+        checkRead = read(write2SR[0], input, 1000);//B1
+        input[checkRead] = '\0';//adding null at the end
+        write(STDOUT_FILENO, "check22\n", 8);
+        //getting the first token to set operation
+        token = strtok(input, " ");
+        sscanf(token, "%s", saveOperator);
+        operation = setOperationServer(saveOperator);
+        write(STDOUT_FILENO, "check33\n", 8);
+        //Request for connection
+        if (operation == 1) {
+            write(STDOUT_FILENO, "check44\n", 8);
+            write(readSR[1], "done", 4);
+            write(STDOUT_FILENO, "check55\n", 8);
+        }
+            //Message from user
+        else if (operation == 2) {
 
-        if (checkRead == 1) {//empty input
-            write(STDIN_FILENO, "No command input\n", 17);
-        } else {
-            //getting the first token to set operation
-            token = strtok(input, " ");
-            sscanf(token, "%s", saveOperator);
-            operation = setOperationInput(saveOperator);
-
-            //Invalid Command
-            if (operation == -1) {
-                write(STDOUT_FILENO, "Invalid Command\n", 16);
-            }
-
-                //print to single clientCommandProcessor
-            else if (operation == 3) {
-                if (activeClients == 0) {
-                    write(STDOUT_FILENO, "No Client Connected\n", 20);
-                } else {
-                    char output[500];
-                    char saveIP[100];
-                    std::string print;
-                    char buf[sizeof(struct in6_addr)];
-                    int clientIndex;
-                    int ipCheck = -1;
-                    token = strtok(nullptr, " ");
-                    if (token == nullptr) {
-                        write(STDOUT_FILENO, "No IP Provided\n", 15);
-                    } else {
-                        ipCheck = inet_pton(AF_INET, token, buf);
-                        if (ipCheck <= 0) {
-                            write(STDOUT_FILENO, "Invalid IP\n", 20);
-                        } else {
-                            for (int i = 0; i <= currentClientIndex; ++i) {
-                                sscanf(clientsList[i].ip.c_str(), "%s", saveIP);
-                                if (strcmp(saveIP, token) == 0) {
-                                    clientIndex = i;
-                                }
-                            }
-                            if (ipCheck != -1) {
-                                print.append("print Message from server: ");
-                                token = strtok(nullptr, " ");
-                                while (token != nullptr) {
-                                    print.append(token).append(" ");
-                                    token = strtok(nullptr, " ");
-                                }
-                                print.append("\n").append("Input next command\n");
-                                int count = sprintf(output, "%s", print.c_str());
-                                if (strcmp(clientsList[clientIndex].status.c_str(), "Connected") == 0) {
-                                    int checkWrite = write(clientsList[clientIndex].writingEnd, output, count);
-                                } else {
-                                    write(STDOUT_FILENO, "Client not connected\n", 21);
-                                }
-                            } else {
-                                write(STDOUT_FILENO, "IP does not exist\n", 18);
-                            }
-                        }
-                    }
-                }
-            }
-
-                //print clientCommandProcessor list
-            else if (operation == 4) {
-                char output[1000];
-                if (currentClientIndex == -1) {
-                    write(STDOUT_FILENO, "No Client Connected\n", 20);
-                } else {
-                    std::string print;
-                    print.append("Client ID\tPID\t\tIP\t\tStatus\n");
-                    for (int i = 0; i <= currentClientIndex; ++i) {
-                        print.append(to_string(clientsList[i].clientID)).append("\t\t");
-                        print.append(to_string(clientsList[i].pid)).append("\t\t");
-                        print.append(clientsList[i].ip).append("\t");
-                        print.append(clientsList[i].status).append("\n");
-                    }
-                    int checkPrint = sprintf(output, "%s", print.c_str());
-                    write(STDOUT_FILENO, output, checkPrint);
-                }
-            }
-
-                //exit
-            else if (operation == 5) {
-                if (activeClients == 0) {
-                    close(msgsock);
-                    exit(getpid());
-                } else {
-                    for (int i = 0; i <= currentClientIndex; ++i) {
-                        if (strcmp(clientsList[i].status.c_str(), "Connected") == 0) {
-                            int checkWrite = write(clientsList[i].writingEnd, "exit ", 5);
-                        }
-                    }
-                    close(msgsock);
-                    exit(getpid());
-                }
-            }
         }
     }
+
 }
 
-//update clientCommandProcessor list on disconnects
+//update clientReader list on disconnects
 void updateClientList(int pid) {
     int index = -1;
     for (int client = 0; client <= currentClientIndex; ++client) {
@@ -554,7 +501,7 @@ void updateClientList(int pid) {
 }
 
 
-void *clientInput2Server(void *clientID) {
+void *clientHandler(void *clientID) {
     char input[1000];
     char output[1000];
     char saveOperator[10];
@@ -617,43 +564,51 @@ void *clientInput2Server(void *clientID) {
             char *connectCheck = connectUser(username, currentUser, o);
             if (connectCheck != nullptr) {
                 sprintf(o, "%s", connectCheck);
-                DES decrypt;
-                char check[1000];
-                sscanf(o, "%s", check);
-                std::stringstream test(check);
-                std::string segment;
-                std::vector<std::string> seglist;
-                while (std::getline(test, segment, ':')) {
-                    seglist.push_back(segment);
-                }
-                string keyPartE = seglist.at(0);
-                string keyPartD = decrypt.runDES(keyPartE, privKey, true);
-                string keyPartT = hex2str(keyPartD);
-                string toSend = seglist.at(1);
+                write(STDOUT_FILENO, "check1\n", 7);
+//                DES decrypt;
+//                char check[1000];
+//                sscanf(o, "%s", check);
+//                std::stringstream test(check);
+//                std::string segment;
+//                std::vector<std::string> seglist;
+//                while (std::getline(test, segment, ':')) {
+//                    seglist.push_back(segment);
+//                }
+//                string keyPartE = seglist.at(0);
+//                string keyPartD = decrypt.runDES(keyPartE, privKey, true);
+//                string keyPartT = hex2str(keyPartD);
+//                string toSend = seglist.at(1);//B's part
                 int cid = findCID(username);
-
-                std::stringstream test2(keyPartT);
-                std::string segment2;
-                std::vector<std::string> seglist2;
-                while (std::getline(test, segment2, ':')) {
-                    seglist2.push_back(segment2);
-                }
-                sessionKey = seglist2.at(0);
-                connections[noOfConnections][0] = currentUser;
-                //before making this connection restructure
-                connections[noOfConnections][1] = username;
-
+//
+//                std::stringstream test2(keyPartT);
+//                std::string segment2;
+//                std::vector<std::string> seglist2;
+//                while (std::getline(test, segment2, ':')) {
+//                    seglist2.push_back(segment2);
+//                }
                 char out[1000];
-                int count = sprintf(out, "%s", toSend.c_str());
-                write(clientsList[cid].writingEnd, out, count);//b's part sent to B
-                write(clientsList[CID].writingEnd, "Connection Successful.\nInput next command\n", 42);
+//                sessionKey = seglist2.at(0);
+//                connections[noOfConnections][0] = currentUser;
+                write(clientsList[cid].serverWritingEnd, "request", 7);//sending B's part
+                write(STDOUT_FILENO, "check2\n", 7);
+                read(clientsList[cid].serverReadingEnd, out, 1000);
+                write(STDOUT_FILENO, "check3\n", 7);
+                if (strcmp(out, "done") == 0) {
+                    write(STDOUT_FILENO, "check4\n", 7);
+                    write(clientsList[CID].writingEnd, "Connection Successful.\nInput next command\n", 42);
+                    write(STDOUT_FILENO, "check5\n", 7);
+                } else {
+                    write(STDOUT_FILENO, "check6\n", 7);
+                    write(clientsList[CID].writingEnd, "Connection Unsuccessful.\nInput next command\n", 44);
+                    write(STDOUT_FILENO, "check7\n", 7);
+                }
             } else {
                 write(clientsList[CID].writingEnd, "User Doesn't Exist.\nInput next command\n", 39);
             }
         } else if (operation == 7) {
 
 
-        }//closing the clientCommandProcessor handler on server exit
+        }//closing the clientReader handler on server exit
         else if (operation == 6) {
             int *status = nullptr;
             write(msgsock, "exit\0", 5);
@@ -741,18 +696,6 @@ long diffieHellman(long G, long P, long A, long B) {
     long X = (long) pow(BS, A);
     long K = X % P;
     return K;
-}
-
-void toHex(char *input, char *output) {
-    int loop = 0;
-    int i = 0;
-    while (input[loop] != '\0') {
-        sprintf((char *) (output + i), "%02X", input[loop]);
-        loop += 1;
-        i += 2;
-    }
-    //marking the end of the string
-    output[i++] = '\0';
 }
 
 string str2hex(const string &s) {
