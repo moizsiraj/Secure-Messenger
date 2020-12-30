@@ -1,21 +1,10 @@
 #include <iostream>
-#include <unistd.h>
 #include <regex>
-#include <cstdio>
-#include <cstring>
-#include <wait.h>
 #include <algorithm>
-#include <fcntl.h>
-#include <ctime>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <cmath>
-#include<bits/stdc++.h>
 #include <bitset>
 
-
 using namespace std;
+namespace mp = boost::multiprecision;
 
 class DES {
 
@@ -295,25 +284,24 @@ class DES {
     }
 
     string getEncodedMessage() {
-        string RL = auxMessage[16][1] + auxMessage[16][0];
+        string RL;
+        RL.append(auxMessage[16][1]).append(auxMessage[16][0]);
         string finalStr;
         for (int j = 0; j < 64; j++) {
             char binChar = RL.at(ip_inv[j] - 1);
             finalStr.push_back((binChar));
         }
-
-        int value = (int) strtol(finalStr.c_str(), nullptr, 2);
-        char hexString[16]; // long enough for any 32-bit value, 4-byte aligned
-        sprintf(hexString, "%x", value);
-        return hexString;
+        stringstream ss;
+        bitset<64> set(finalStr);
+        ss << hex << set.to_ulong() << endl;
+        return ss.str();
     }
 
     void getRight(int index) {
         long Ln_1 = stol(auxMessage[index - 1][0], nullptr, 2);
         string function = func(index);//buggy
         long functionToBin = stol(function, nullptr, 2);
-        long valueBin = (long)pow(Ln_1, functionToBin);
-
+        long valueBin = Ln_1 ^functionToBin;
         std::string valueStr = std::bitset<32>(valueBin).to_string();
         auxMessage[index][1] = valueStr;
     }
@@ -336,13 +324,13 @@ class DES {
             binStore[i] = binary.substr(start, end);
             start = start + 6;
         }
-        for (int i = 0; i < 8; i++) {//buggy part
+        for (int i = 0; i < 8; i++) {
             string rowStr;
             string tempStr = binStore[i];
             rowStr.push_back((tempStr.at(0)));
             rowStr.push_back(tempStr.at(5));
             int row = stoi(rowStr, nullptr, 2);
-            string columnStr = tempStr.substr(1, 5);
+            string columnStr = tempStr.substr(1, 4);
             int column = stoi(columnStr, nullptr, 2);
             int value;
             string binValue;
@@ -409,9 +397,3 @@ public:
         return encodedMessage;
     }
 };
-
-
-int main() {
-    DES d;
-    d.runDES("123456789ABCDEF", "133457799BBCDFF1");
-}
