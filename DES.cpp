@@ -2,6 +2,7 @@
 #include <regex>
 #include <algorithm>
 #include <bitset>
+#include <unistd.h>
 
 using namespace std;
 
@@ -390,7 +391,6 @@ public:
         getAuxKeys(permutedKey);
         getFinalKeys();
         string permutedMessage = initialPermute(message);
-        //done till here
         getAuxMessages(permutedMessage);
         string encodedMessage = getEncodedMessage();
         return encodedMessage;

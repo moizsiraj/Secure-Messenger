@@ -11,8 +11,14 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <cmath>
+#include <iomanip>
+#include "DES.cpp"
 
 using namespace std;
+
+string str2hex(const string &s);
+
+string hex2str(string hex);
 
 int setOperation(char *operationText);
 
@@ -48,7 +54,7 @@ void *clientInput2Server(void *clientID);
 
 int bindIP(char *username, string IP);
 
-int connectUser(char *username, string currentUser);
+char *connectUser(char *username, string currentUser, char *output);
 
 struct clients {
     int clientID = -1;
@@ -309,7 +315,7 @@ int registerUser(char *username, char *publicKey, char *privateKey) {
         }
     }
     std::string key(publicKey);
-    std::string privKey(publicKey);
+    std::string privKey(privateKey);
     KDC[noOfUsers][0] = user;
     KDC[noOfUsers][1] = key;
     KDC[noOfUsers][2] = privKey;
@@ -554,6 +560,8 @@ void *clientInput2Server(void *clientID) {
     int operation = -1;
     char *token;
     string currentUser;
+    string privKey;
+    string pubKey;
     int checkRead;
 
     while (true) {
@@ -575,6 +583,12 @@ void *clientInput2Server(void *clientID) {
             if (registerCheck == -1) {
                 write(clientsList[CID].writingEnd, "User already exists. Registration failed. Please try again.", 59);
             } else if (registerCheck == 0) {
+                std::string user(username);
+                currentUser = user;
+                std::string puK(publicKey);
+                pubKey = puK;
+                std::string prK(privateKey);
+                privKey = prK;
                 write(clientsList[CID].writingEnd, "Registration Successful\n", 24);
             }
         } else if (operation == 2) {
@@ -589,12 +603,21 @@ void *clientInput2Server(void *clientID) {
                 write(clientsList[CID].writingEnd, "User Doesn't Exist.\nInput next command\n", 39);
             }
         } else if (operation == 3) {
+            char o[1000];
             char *username;
             username = strtok(nullptr, " ");
-            int connectCheck = connectUser(username, currentUser);
-            if (connectCheck == 1) {
+            char *connectCheck = connectUser(username, currentUser, o);
+            if (connectCheck != nullptr) {
+                int count = sprintf(o, "%s", connectCheck);
+                DES decrypt;
+                char check[64];
+                sscanf(o, "%s", check);
+                string print = decrypt.runDES(check, privKey);
+                string pprint = hex2str(print);
+                count = sprintf(o, "%s", pprint.c_str());
+                write(STDOUT_FILENO, o, count);
                 write(clientsList[CID].writingEnd, "Connection Successful.\nInput next command\n", 42);
-            } else if (connectCheck == 0) {
+            } else {
                 write(clientsList[CID].writingEnd, "User Doesn't Exist.\nInput next command\n", 39);
             }
         }//closing the clientCommandProcessor handler on server exit
@@ -609,7 +632,7 @@ void *clientInput2Server(void *clientID) {
     }
 }
 
-int connectUser(char *username, string currentUser) {
+char *connectUser(char *username, string currentUser, char *output) {
     std::string user(username);
     int indexB;
     int indexA = 0;
@@ -628,13 +651,19 @@ int connectUser(char *username, string currentUser) {
                 break;
             }
         }
-        char o[10];
         long sessionKey = diffieHellman(DFHLG, DFHLP, atoi(KDC[indexA][1].c_str()), atoi(KDC[indexB][1].c_str()));
-        string messageA = to_string(sessionKey).append(" ").append(KDC[indexA][0]).append(" ");
-        string messageB = to_string(sessionKey).append(" ").append(KDC[indexB][0]).append(" ");
-        return 1;
+        string messageA = to_string(sessionKey).append(":").append(KDC[indexA][0]);
+        string messageB = to_string(sessionKey).append(":").append(KDC[indexB][0]);
+        string hexB = str2hex(messageB);
+        DES encrypt;
+        string packetB = encrypt.runDES(hexB, KDC[indexB][2]);
+        string finalMessageA = messageA.append(":").append(packetB);
+        string hexA = str2hex(finalMessageA);
+        string packetA = encrypt.runDES(hexA, KDC[indexA][2]);
+        sprintf(output, "%s", packetA.c_str());
+        return output;
     } else {
-        return 0;
+        return nullptr;
     }
 }
 
@@ -662,6 +691,37 @@ long diffieHellman(long G, long P, long A, long B) {
     long X = (long) pow(BS, A);
     long K = X % P;
     return K;
+}
+
+void toHex(char *input, char *output) {
+    int loop = 0;
+    int i = 0;
+    while (input[loop] != '\0') {
+        sprintf((char *) (output + i), "%02X", input[loop]);
+        loop += 1;
+        i += 2;
+    }
+    //marking the end of the string
+    output[i++] = '\0';
+}
+
+string str2hex(const string &s) {
+    ostringstream ret;
+    for (string::size_type i = 0; i < s.length(); ++i) {
+        ret << std::hex << std::setfill('0') << std::setw(2) << (int) s[i];
+    }
+    return ret.str();
+}
+
+string hex2str(string hex) {
+    int len = hex.length();
+    std::string newString;
+    for (int i = 0; i < len; i += 2) {
+        string byte = hex.substr(i, 2);
+        char chr = (char) (int) strtol(byte.c_str(), nullptr, 16);
+        newString.push_back(chr);
+    }
+    return newString;
 }
 
 
