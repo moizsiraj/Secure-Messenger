@@ -500,10 +500,10 @@ public:
     }
 };
 
-int main() {
-    DES d;
-    string encrypt = d.runDES("0123456789ABCDEF", "133457799BBCDFF1", false);
-    string decrypt = d.runDES(encrypt, "133457799BBCDFF1", true);
-    printf("%s", encrypt.c_str());
-    printf("%s", decrypt.c_str());
-}
+//int main() {
+//    DES d;
+//    string encrypt = d.runDES("313a6d", "0123456789ABCDEF", false);
+//    string decrypt = d.runDES(encrypt, "0123456789ABCDEF", true);
+//    printf("%s", encrypt.c_str());
+//    printf("%s", decrypt.c_str());
+//}

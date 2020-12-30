@@ -663,42 +663,10 @@ char *connectUser(char *username, string currentUser, char *output) {
         string hexB = str2hex(messageB);
         string hexA = str2hex(messageA);
         DES encrypt;
-        string packetB = encrypt.runDES(hexB, KDC[indexB][2]);//done
-        string packetA = encrypt.runDES(hexA, KDC[indexA][2]);
+        string packetB = encrypt.runDES(hexB, KDC[indexB][2], false);//done
+        string packetA = encrypt.runDES(hexA, KDC[indexA][2], false);
         string finalMessageA = packetA + ":" + packetB;
-        string print;
-        print.append("messageA ").append(messageA)
-                .append("\n")
-                .append("messageB ").append(messageB)
-                .append("\n")
-                .append("hexB ").append(hexB)
-                .append("\n")
-                .append("packetB ").append(packetB)
-                .append("\n")
-                .append("hexFMA ").append(hexA)
-                .append("\n")
-                .append("packetA ").append(packetA)
-                .append("\n")
-                .append("finalMessageA ").append(finalMessageA)
-                .append("\n");
-        int xcount = sprintf(output, "%s", print.c_str());
-        write(STDOUT_FILENO, output, xcount);
-        int i = 0;
-        char check = finalMessageA.at(i);
-        string str;
-        while (check != ':') {
-            str.push_back(check);
-            check = finalMessageA.at(i);
-            i++;
-        }
-        string decryptPA = encrypt.runDES(str, KDC[indexA][2]);
-        print.append("decryptPA==hexFMA ").append(decryptPA).append("\n");
-        string HSA = hex2str(decryptPA);
-        print.append("HSA==finalMessageA ").append(HSA).append("\n");
-
-
-        xcount = sprintf(output, "%s", print.c_str());
-        write(STDOUT_FILENO, output, xcount);
+        sprintf(output, "%s", finalMessageA.c_str());
         return output;
     } else {
         return nullptr;
@@ -767,3 +735,11 @@ string hex2str(string hex) {
 //int count = sprintf(out, "%s", key.c_str());
 //write(STDOUT_FILENO, out, count);
 
+//parsing
+//std::stringstream test(finalMessageA);
+//std::string segment;
+//std::vector<std::string> seglist;
+//while (std::getline(test, segment, ':')) {
+//seglist.push_back(segment);
+//}
+//string decryptPA = encrypt.runDES(seglist.at(1), KDC[indexB][2], true);
