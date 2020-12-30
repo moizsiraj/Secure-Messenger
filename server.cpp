@@ -459,20 +459,15 @@ void *serverReader(void *ptr) {
     int checkRead;
 
     while (true) {
-        write(STDOUT_FILENO, "check11\n", 8);
         checkRead = read(write2SR[0], input, 1000);//B1
         input[checkRead] = '\0';//adding null at the end
-        write(STDOUT_FILENO, "check22\n", 8);
         //getting the first token to set operation
         token = strtok(input, " ");
         sscanf(token, "%s", saveOperator);
         operation = setOperationServer(saveOperator);
-        write(STDOUT_FILENO, "check33\n", 8);
         //Request for connection
         if (operation == 1) {
-            write(STDOUT_FILENO, "check44\n", 8);
             write(readSR[1], "done", 4);
-            write(STDOUT_FILENO, "check55\n", 8);
         }
             //Message from user
         else if (operation == 2) {
@@ -564,7 +559,6 @@ void *clientHandler(void *clientID) {
             char *connectCheck = connectUser(username, currentUser, o);
             if (connectCheck != nullptr) {
                 sprintf(o, "%s", connectCheck);
-                write(STDOUT_FILENO, "check1\n", 7);
 //                DES decrypt;
 //                char check[1000];
 //                sscanf(o, "%s", check);
@@ -590,17 +584,11 @@ void *clientHandler(void *clientID) {
 //                sessionKey = seglist2.at(0);
 //                connections[noOfConnections][0] = currentUser;
                 write(clientsList[cid].serverWritingEnd, "request", 7);//sending B's part
-                write(STDOUT_FILENO, "check2\n", 7);
                 read(clientsList[cid].serverReadingEnd, out, 1000);
-                write(STDOUT_FILENO, "check3\n", 7);
                 if (strcmp(out, "done") == 0) {
-                    write(STDOUT_FILENO, "check4\n", 7);
                     write(clientsList[CID].writingEnd, "Connection Successful.\nInput next command\n", 42);
-                    write(STDOUT_FILENO, "check5\n", 7);
                 } else {
-                    write(STDOUT_FILENO, "check6\n", 7);
                     write(clientsList[CID].writingEnd, "Connection Unsuccessful.\nInput next command\n", 44);
-                    write(STDOUT_FILENO, "check7\n", 7);
                 }
             } else {
                 write(clientsList[CID].writingEnd, "User Doesn't Exist.\nInput next command\n", 39);
