@@ -16,6 +16,8 @@
 
 using namespace std;
 
+std::string int2hex(int i);
+
 string str2hex(const string &s);
 
 int findCID(char *username);
@@ -81,7 +83,7 @@ struct clients {
 
 string KDC[50][3];
 string UIP[50][2];
-string connections[25][2];
+string connections[25][3];
 int noOfUsers = 0;//KDC
 int noOfConUsers = 0;//UIP
 int noOfConnections = 0;//connections
@@ -303,7 +305,7 @@ int setOperationServer(char *operationText) {
     int operation;
     if (strcmp(operationText, "request") == 0) {
         operation = 1;
-    } else if (strcmp(operationText, "message") == 0) {
+    } else if (strcmp(operationText, "response") == 0) {
         operation = 2;
     } else {
         operation = -1;
@@ -484,9 +486,19 @@ void *serverReader(void *ptr) {
             write(STDOUT_FILENO, input, count);
             write(write2CON[1], input, 1000);
         }
-            //Message from user
+            //response from requested user
         else if (operation == 2) {
-
+            write(STDOUT_FILENO, "check1\n", 7);
+            token = strtok(nullptr, " ");
+            if (strcmp(token, "none") != 0) {
+                write(STDOUT_FILENO, "check2\n", 7);
+                char out[1000];
+                int count = sprintf(out, "%s", token);
+                write(readSR[1], out, count);
+                write(STDOUT_FILENO, "check3\n", 7);
+            } else {
+                write(readSR[1], "null", 4);
+            }
         }
     }
 
@@ -583,6 +595,15 @@ void *clientHandler(void *clientID) {
                 string keyPartE = get.A;
                 string keyPartD = decrypt.runDES(keyPartE, privKey, true);
                 string keyPartT = hex2str(keyPartD);
+
+                string sKey;
+                int index = 0;
+                while (keyPartT.at(index) != ':') {
+                    sKey.push_back(keyPartT.at(index));
+                    index++;
+                }
+                sessionKey = sKey;
+                string extendedKey = int2hex(stoi(sessionKey));
                 string toSend = get.B;
                 int cid = findCID(username);
                 char out[1000];
@@ -590,6 +611,32 @@ void *clientHandler(void *clientID) {
                 msg.append("request ").append(toSend);
                 count = sprintf(out, "%s", msg.c_str());
                 write(clientsList[cid].serverWritingEnd, out, count);//sending B's part
+                count = read(clientsList[CID].serverReadingEnd, out, 1000);//reading the result of connect
+
+                out[count] = '\0';
+                write(STDOUT_FILENO, out, count);
+
+                if (strcmp(out, "null") != 0) {
+                    string response(out);
+
+                    string decryptedRes = decrypt.runDES(response, extendedKey, true);
+                    string str = hex2str(decryptedRes);
+                    count = sprintf(out, "%s", decryptedRes.c_str());
+                    write(STDOUT_FILENO, out, count);
+
+                    if (strcmp(str.c_str(), "done") == 0) {
+                        connections[noOfConnections][0] = currentUser;
+                        connections[noOfConnections][1] = username;
+                        connections[noOfConnections][2] = extendedKey;
+                        noOfConnections++;
+                        connections[noOfConnections][0] = username;
+                        connections[noOfConnections][1] = currentUser;
+                        connections[noOfConnections][2] = extendedKey;
+                        write(clientsList[CID].writingEnd, "Connection Successful.\nInput next command\n", 42);
+                    } else {
+                        write(clientsList[CID].writingEnd, "Connection Unsuccessful.\nInput next command\n", 44);
+                    }
+                }
             } else {
                 write(clientsList[CID].writingEnd, "User Doesn't Exist.\nInput next command\n", 39);
             }
@@ -618,12 +665,21 @@ void *clientHandler(void *clientID) {
             sessionKey = sKey;
             strcpy(user, usr.c_str());
             int cid = findCID(user);
-            if (cid != -1){
-                write(clientsList[cid].writingEnd, "Connection Successful.\nInput next command\n", 42);
-            }else {
-                write(clientsList[cid].writingEnd, "Connection Unsuccessful.\nInput next command\n", 44);
+            //encrypt using session key
+            string extendedKey = int2hex(stoi(sessionKey));
+            string nonce = "done";
+            string nonceHex = str2hex(nonce);
+            DES d;
+            string msg = "response ";
+            string encryptedNonce = d.runDES(nonceHex, extendedKey, false);
+            msg.append(encryptedNonce);
+            count = sprintf(out, "%s", msg.c_str());
+            write(STDOUT_FILENO, out, count);
+            if (cid != -1) {
+                write(clientsList[cid].serverWritingEnd, out, count);//serverWritingEnd
+            } else {
+                write(clientsList[cid].serverWritingEnd, "null", 4);//serverWritingEnd
             }
-            //send message on server writing end
         }//closing the clientReader handler on server exit
         else if (operation == 6) {
             int *status = nullptr;
@@ -736,6 +792,13 @@ string hex2str(string hex) {
         newString.push_back(chr);
     }
     return newString;
+}
+
+std::string int2hex(int i) {
+    std::stringstream stream;
+    stream << std::setfill('0') << std::setw(16)
+           << std::hex << i;
+    return stream.str();
 }
 
 ////string printing
