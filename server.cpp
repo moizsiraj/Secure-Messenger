@@ -539,12 +539,8 @@ void *clientHandler(void *clientID) {
             //messaging
         } else if (operation == 2) {
             char out[1000];
-            string pp;
             char *username;
             username = strtok(nullptr, " ");
-            pp.append(username).append(" ").append(clientsList[CID].ip);
-            int count = sprintf(out, "%s", pp.c_str());
-            write(STDOUT_FILENO, out, count);
             int bindCheck = bindIP(username, clientsList[CID].ip);
             if (bindCheck == 1) {
                 int index = -1;
@@ -579,17 +575,12 @@ void *clientHandler(void *clientID) {
                 string keyPartD = decrypt.runDES(keyPartE, privKey, true);
                 string keyPartT = hex2str(keyPartD);
                 string toSend = get.B;
-                string print;
-                print.append(keyPartE).append(" ").append(keyPartD).append(" ").append(keyPartT);
-                char y[1000];
-                count = sprintf(y, "%s", print.c_str());
-                write(STDOUT_FILENO, y, count);
-                count = sprintf(y, "%s", toSend.c_str());
-                write(STDOUT_FILENO, y, count);
                 int cid = findCID(username);
                 char out[1000];
-                connections[noOfConnections][0] = currentUser;
-                write(clientsList[cid].serverWritingEnd, "request", 7);//sending B's part
+                string msg;
+                msg.append("request ").append(toSend);
+                count = sprintf(out, "%s", msg.c_str());
+                write(clientsList[cid].serverWritingEnd, out, count);//sending B's part
                 count = read(clientsList[cid].serverReadingEnd, out, 1000);
                 out[count] = '\0';
                 if (strcmp(out, "done") == 0) {
@@ -652,8 +643,8 @@ data connectUser(char *username, string currentUser) {
 
         long sessionKey = diffieHellman(DFHLG, DFHLP, strtol(KDC[indexA][1].c_str(), nullptr, 10),
                                         strtol(KDC[indexB][1].c_str(), nullptr, 10));
-        string messageA = to_string(sessionKey).append(":").append(KDC[indexA][0]);
-        string messageB = to_string(sessionKey).append(":").append(KDC[indexB][0]);
+        string messageA = to_string(sessionKey).append(":").append(KDC[indexB][0]);
+        string messageB = to_string(sessionKey).append(":").append(KDC[indexA][0]);
         string hexB = str2hex(messageB);
         string hexA = str2hex(messageA);
         DES encrypt;
