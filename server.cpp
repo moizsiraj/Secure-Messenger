@@ -291,6 +291,8 @@ int setOperationInput(char *operationText) {
         operation = 5;
     } else if (strcmp(operationText, "exit") == 0) {
         operation = 6;
+    } else if (strcmp(operationText, "request") == 0) {
+        operation = 7;
     } else {
         operation = -1;
     }
@@ -459,6 +461,7 @@ void *clientReader(void *ptr) {
 //server reader thread on the child process to take instructions from server
 void *serverReader(void *ptr) {
     char input[1000];
+    char output[1000];
     char saveOperator[10];
     int operation = -1;
     char *token;
@@ -473,7 +476,13 @@ void *serverReader(void *ptr) {
         operation = setOperationServer(saveOperator);
         //Request for connection
         if (operation == 1) {
-            write(readSR[1], "done", 4);
+            token = strtok(nullptr, " ");
+            string keyPartE = token;
+            string msg = "request ";
+            msg.append(keyPartE);
+            int count = sprintf(input, "%s", msg.c_str());
+            write(STDOUT_FILENO, input, count);
+            write(write2CON[1], input, 1000);
         }
             //Message from user
         else if (operation == 2) {
@@ -581,19 +590,40 @@ void *clientHandler(void *clientID) {
                 msg.append("request ").append(toSend);
                 count = sprintf(out, "%s", msg.c_str());
                 write(clientsList[cid].serverWritingEnd, out, count);//sending B's part
-                count = read(clientsList[cid].serverReadingEnd, out, 1000);
-                out[count] = '\0';
-                if (strcmp(out, "done") == 0) {
-                    write(clientsList[CID].writingEnd, "Connection Successful.\nInput next command\n", 42);
-                } else {
-                    write(clientsList[CID].writingEnd, "Connection Unsuccessful.\nInput next command\n", 44);
-                }
             } else {
                 write(clientsList[CID].writingEnd, "User Doesn't Exist.\nInput next command\n", 39);
             }
         } else if (operation == 7) {
-
-
+            char *message;
+            char user[100];
+            char out[1000];
+            message = strtok(nullptr, " ");
+            int count = sscanf(message, "%s", out);
+            write(STDOUT_FILENO, out, 100);
+            DES decrypt;
+            string keyPartD = decrypt.runDES(message, privKey, true);
+            string str = hex2str(keyPartD);
+            string sKey;
+            string usr;
+            int index = 0;
+            while (str.at(index) != ':') {
+                sKey.push_back(str.at(index));
+                index++;
+            }
+            index++;
+            while (index < str.length()) {
+                usr.push_back(str.at(index));
+                index++;
+            }
+            sessionKey = sKey;
+            strcpy(user, usr.c_str());
+            int cid = findCID(user);
+            if (cid != -1){
+                write(clientsList[cid].writingEnd, "Connection Successful.\nInput next command\n", 42);
+            }else {
+                write(clientsList[cid].writingEnd, "Connection Unsuccessful.\nInput next command\n", 44);
+            }
+            //send message on server writing end
         }//closing the clientReader handler on server exit
         else if (operation == 6) {
             int *status = nullptr;
