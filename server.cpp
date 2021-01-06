@@ -58,7 +58,13 @@ void *clientHandler(void *clientID);
 
 int bindIP(char *username, string IP);
 
-char *connectUser(char *username, string currentUser, char *output);
+struct data {
+    string A;
+    string B;
+};
+
+
+data connectUser(char *username, string currentUser);
 
 struct clients {
     int clientID = -1;
@@ -71,6 +77,7 @@ struct clients {
     int serverWritingEnd = -1;
     int serverReadingEnd = -1;
 };
+
 
 string KDC[50][3];
 string UIP[50][2];
@@ -109,7 +116,7 @@ int main() {
     createSock();
     listen(sock, 5);
     write(STDOUT_FILENO, "Accepting Connections Now\n", 26);
-    inputID = pthread_create(&inputThread, nullptr, serverReader, (void *) nullptr);
+//    inputID = pthread_create(&inputThread, nullptr, serverReader, (void *) nullptr);
     struct sockaddr_in addr;
     socklen_t client_addr_size = sizeof(struct sockaddr_in);
     int clientHandlerPID;
@@ -123,7 +130,7 @@ int main() {
             int checkPipe2 = pipe(write2CON);
             pipe(write2SR);
             pipe(readSR);
-            clientsList[currentClientIndex].clientID = currentClientIndex + 1;
+            clientsList[currentClientIndex].clientID = currentClientIndex;
             clientsList[currentClientIndex].readingEnd = write2CON[0];
             clientsList[currentClientIndex].writingEnd = write2CH[1];
             clientsList[currentClientIndex].ip = inet_ntoa(addr.sin_addr);
@@ -156,7 +163,7 @@ int main() {
         }
         clientsList[currentClientIndex].pid = clientHandlerPID;
     }
-    pthread_join(inputThread, nullptr);
+//    pthread_join(inputThread, nullptr);
     for (int i = 0; i < currentClientIndex; ++i) {
         pthread_join(clientInputThread[i], nullptr);
     }
@@ -415,7 +422,7 @@ void *clientReader(void *ptr) {
                 write(msgsock, outputText, count);
             }
         }
-            //bindIP
+            //messaging
         else if (operation == 2) {
             char *username;
             username = strtok(nullptr, " ");
@@ -507,6 +514,7 @@ void *clientHandler(void *clientID) {
     string sessionKey;
     int checkRead;
 
+
     while (true) {
         int CID = *((int *) clientID);
         checkRead = read(clientsList[CID].readingEnd, input, 1000);//B2//B4
@@ -528,10 +536,15 @@ void *clientHandler(void *clientID) {
             } else if (registerCheck == 0) {
                 write(clientsList[CID].writingEnd, "Registration Successful\n", 24);
             }
-            //binding
+            //messaging
         } else if (operation == 2) {
+            char out[1000];
+            string pp;
             char *username;
             username = strtok(nullptr, " ");
+            pp.append(username).append(" ").append(clientsList[CID].ip);
+            int count = sprintf(out, "%s", pp.c_str());
+            write(STDOUT_FILENO, out, count);
             int bindCheck = bindIP(username, clientsList[CID].ip);
             if (bindCheck == 1) {
                 int index = -1;
@@ -552,45 +565,33 @@ void *clientHandler(void *clientID) {
             }
             //connect user
         } else if (operation == 3) {
+            char *token;
             char o[1000];
             char *username;
             username = strtok(nullptr, " ");
-            char *connectCheck = connectUser(username, currentUser, o);
-            if (connectCheck != nullptr) {
-                int count = sprintf(o, "%s", connectCheck);
-                write(STDOUT_FILENO, o, count);
-//                DES decrypt;
-//                char check[1000];
-//                sscanf(o, "%s", check);
-//                std::stringstream test(check);
-//                std::string segment;
-//                std::vector<std::string> seglist;
-//                while (std::getline(test, segment, ':')) {
-//                    seglist.push_back(segment);
-//                }
-//                string keyPartE = seglist.at(0);
-//                string keyPartD = decrypt.runDES(keyPartE, privKey, true);
-//                string keyPartT = hex2str(keyPartD);
-//                string toSend = seglist.at(1);//B's part
-//                string print;
-//                print.append(keyPartE).append(" ").append(keyPartD).append(" ").append(keyPartT).append(" ").append(
-//                        toSend);
-//                char y[1000];
-//                count = sprintf(y, "%s", print.c_str());
-//                write(STDOUT_FILENO, y, count);
+            data get;
+            get = connectUser(username, currentUser);
+            if (strcmp(get.A.c_str(), "x") != 0) {
+                int count;
+                DES decrypt;
+                char check[1000];
+                string keyPartE = get.A;
+                string keyPartD = decrypt.runDES(keyPartE, privKey, true);
+                string keyPartT = hex2str(keyPartD);
+                string toSend = get.B;
+                string print;
+                print.append(keyPartE).append(" ").append(keyPartD).append(" ").append(keyPartT);
+                char y[1000];
+                count = sprintf(y, "%s", print.c_str());
+                write(STDOUT_FILENO, y, count);
+                count = sprintf(y, "%s", toSend.c_str());
+                write(STDOUT_FILENO, y, count);
                 int cid = findCID(username);
-                write(STDOUT_FILENO, "check1\n", 7);
-//                std::stringstream test2(keyPartT);
-//                std::string segment2;
-//                std::vector<std::string> seglist2;
-//                while (std::getline(test, segment2, ':')) {
-//                    seglist2.push_back(segment2);
-//                }
                 char out[1000];
-//                sessionKey = seglist2.at(0);
                 connections[noOfConnections][0] = currentUser;
                 write(clientsList[cid].serverWritingEnd, "request", 7);//sending B's part
-                read(clientsList[cid].serverReadingEnd, out, 1000);
+                count = read(clientsList[cid].serverReadingEnd, out, 1000);
+                out[count] = '\0';
                 if (strcmp(out, "done") == 0) {
                     write(clientsList[CID].writingEnd, "Connection Successful.\nInput next command\n", 42);
                 } else {
@@ -621,7 +622,7 @@ int findCID(char *username) {
             getIP = UIP[i][1];
         }
     }
-    for (int i = 0; i < currentClientIndex; ++i) {
+    for (int i = 0; i <= currentClientIndex; ++i) {
         if (strcmp(getIP.c_str(), clientsList[i].ip.c_str()) == 0) {
             return clientsList[i].clientID;
         }
@@ -629,7 +630,7 @@ int findCID(char *username) {
     return -1;
 }
 
-char *connectUser(char *username, string currentUser, char *output) {
+data connectUser(char *username, string currentUser) {
     std::string user(username);
     int indexB;
     int indexA = 0;
@@ -658,12 +659,16 @@ char *connectUser(char *username, string currentUser, char *output) {
         DES encrypt;
         string packetB = encrypt.runDES(hexB, KDC[indexB][2], false);//done
         string packetA = encrypt.runDES(hexA, KDC[indexA][2], false);
-        string finalMessageA;
-        finalMessageA.append(packetA).append(":").append(packetB);
-        sprintf(output, "%s", finalMessageA.c_str());
-        return output;
+
+        data send;
+        send.A = packetA;
+        send.B = packetB;
+        return send;
     } else {
-        return nullptr;
+        data send;
+        send.A = "x";
+        send.B = "x";
+        return send;
     }
 }
 
