@@ -295,6 +295,8 @@ int setOperationInput(char *operationText) {
         operation = 6;
     } else if (strcmp(operationText, "request") == 0) {
         operation = 7;
+    } else if (strcmp(operationText, "getMessage") == 0) {
+        operation = 8;
     } else {
         operation = -1;
     }
@@ -307,6 +309,8 @@ int setOperationServer(char *operationText) {
         operation = 1;
     } else if (strcmp(operationText, "response") == 0) {
         operation = 2;
+    } else if (strcmp(operationText, "message") == 0) {
+        operation = 3;
     } else {
         operation = -1;
     }
@@ -456,6 +460,22 @@ void *clientReader(void *ptr) {
                 write(msgsock, outputText, count);
             }
         }
+            //message
+        else if (operation == 4) {
+            string message = "message ";
+            token = strtok(nullptr, " ");
+            while (token != nullptr) {
+                message.append(token).append(" ");
+                token = strtok(nullptr, " ");
+            }
+            if (message.length() == 7) {
+                write(msgsock, "Invalid Command. Input next command\n", 36);
+            } else {
+                int count = sprintf(outputText, "%s", message.c_str());
+                write(write2CON[1], outputText, count);
+                ///to be continued
+            }
+        }
     }
     return nullptr;
 }
@@ -488,17 +508,25 @@ void *serverReader(void *ptr) {
         }
             //response from requested user
         else if (operation == 2) {
-            write(STDOUT_FILENO, "check1\n", 7);
             token = strtok(nullptr, " ");
             if (strcmp(token, "none") != 0) {
-                write(STDOUT_FILENO, "check2\n", 7);
                 char out[1000];
                 int count = sprintf(out, "%s", token);
                 write(readSR[1], out, count);
-                write(STDOUT_FILENO, "check3\n", 7);
             } else {
                 write(readSR[1], "null", 4);
             }
+        } else if (operation == 3) {
+            write(STDOUT_FILENO, "check1\n", 7);
+            token = strtok(nullptr, " ");
+            string getMessage = "getMessage ";
+            getMessage.append(token);
+            char out[1000];
+            int count = sprintf(out, "%s", getMessage.c_str());
+            write(STDOUT_FILENO, "check11\n", 8);
+            write(write2CON[1], out, count);
+            write(STDOUT_FILENO, "check22\n", 8);
+            //to be continued
         }
     }
 
@@ -632,6 +660,7 @@ void *clientHandler(void *clientID) {
                         connections[noOfConnections][0] = username;
                         connections[noOfConnections][1] = currentUser;
                         connections[noOfConnections][2] = extendedKey;
+                        noOfConnections++;
                         write(clientsList[CID].writingEnd, "Connection Successful.\nInput next command\n", 42);
                     } else {
                         write(clientsList[CID].writingEnd, "Connection Unsuccessful.\nInput next command\n", 44);
@@ -640,6 +669,78 @@ void *clientHandler(void *clientID) {
             } else {
                 write(clientsList[CID].writingEnd, "User Doesn't Exist.\nInput next command\n", 39);
             }
+        } else if (operation == 4) {
+            string message;
+            string receiver;
+            token = strtok(nullptr, " ");
+            while (token != nullptr) {
+                message.append(token);
+                token = strtok(nullptr, " ");
+            }
+            write(STDOUT_FILENO, "check7\n", 7);
+            char o[1000];
+            string sKey;
+            for (int i = 0; i < noOfConnections; ++i) {
+                if (strcmp(connections[i][0].c_str(), currentUser.c_str()) == 0) {
+                    receiver = connections[i][1];
+                    sKey = connections[i][2];
+                }
+            }
+            write(STDOUT_FILENO, "check8\n", 7);
+            char rcvr[100];
+            int count;
+            DES encrypt;
+            char check[1000];
+            strcpy(rcvr, receiver.c_str());
+            int cid = findCID(rcvr);
+            write(STDOUT_FILENO, "check9\n", 7);
+            string hexMsg = str2hex(message);
+            string extendedSK = int2hex(stoi(sessionKey));
+            string encryptedMsg = "message ";
+            encryptedMsg.append(encrypt.runDES(hexMsg, extendedSK, false));
+            string print = message;
+            print.append(" ").append(encryptedMsg).append("\n");
+            count = sprintf(o, "%s", encryptedMsg.c_str());
+            write(STDOUT_FILENO, "check1\n", 7);
+            write(clientsList[cid].serverWritingEnd, o, count);
+            write(STDOUT_FILENO, "check2\n", 7);
+            //to be continued
+
+
+        } else if (operation == 8) {
+            write(STDOUT_FILENO, "check111\n", 9);
+            string message;
+            string sender;
+
+            token = strtok(nullptr, " ");
+            message = token;
+            char o[1000];
+            string sKey;
+            for (int i = 0; i < noOfConnections; ++i) {
+                if (strcmp(connections[i][0].c_str(), currentUser.c_str()) == 0) {
+                    sender = connections[i][1];
+                    sKey = connections[i][2];
+                }
+            }
+            char sndr[100];
+            strcpy(sndr, sender.c_str());
+            int senderCid = findCID(sndr);
+            DES decrypt;
+            char check[1000];
+            string extendedSK = int2hex(stoi(sessionKey));
+            string decryptedMsg = decrypt.runDES(message, extendedSK, true);
+            string strMsg = hex2str(decryptedMsg);
+            string str = "message from ";
+            str.append(sender).append(" : ").append(strMsg);
+            char out[1000];
+            int count = sprintf(out, "%s", str.c_str());
+            write(STDOUT_FILENO, out, count);
+
+            write(clientsList[CID].msgsock, out, count);
+            write(clientsList[senderCid].msgsock, "Input next command.\n", 20);
+            //to be continued
+
+
         } else if (operation == 7) {
             char *message;
             char user[100];
