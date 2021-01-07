@@ -374,8 +374,10 @@ void *clientReader(void *ptr) {
     int operation = -1;
     char *token;
 
-    write(msgsock, "Commands: kill <pid>, list, run <process> <path(optional)>, "
-                   "add/div/sub/mul <list of numbers separated by spaces>\nInput exit to terminate:\n"
+    write(msgsock, "Commands: register <user name> <public key> <Symmetric key for KDC>\n"
+                   "messaging <username>\n"
+                   "connect <username of receiver>\n"
+                   "message <message>\n"
                    "Please input your command:\n", 166);
 
     while (continueInput) {
@@ -503,7 +505,6 @@ void *serverReader(void *ptr) {
             string msg = "request ";
             msg.append(keyPartE);
             int count = sprintf(input, "%s", msg.c_str());
-            write(STDOUT_FILENO, input, count);
             write(write2CON[1], input, 1000);
         }
             //response from requested user
@@ -517,16 +518,12 @@ void *serverReader(void *ptr) {
                 write(readSR[1], "null", 4);
             }
         } else if (operation == 3) {
-            write(STDOUT_FILENO, "check1\n", 7);
             token = strtok(nullptr, " ");
             string getMessage = "getMessage ";
             getMessage.append(token);
             char out[1000];
             int count = sprintf(out, "%s", getMessage.c_str());
-            write(STDOUT_FILENO, "check11\n", 8);
             write(write2CON[1], out, count);
-            write(STDOUT_FILENO, "check22\n", 8);
-            //to be continued
         }
     }
 
@@ -640,18 +637,11 @@ void *clientHandler(void *clientID) {
                 count = sprintf(out, "%s", msg.c_str());
                 write(clientsList[cid].serverWritingEnd, out, count);//sending B's part
                 count = read(clientsList[CID].serverReadingEnd, out, 1000);//reading the result of connect
-
                 out[count] = '\0';
-                write(STDOUT_FILENO, out, count);
-
                 if (strcmp(out, "null") != 0) {
                     string response(out);
-
                     string decryptedRes = decrypt.runDES(response, extendedKey, true);
                     string str = hex2str(decryptedRes);
-                    count = sprintf(out, "%s", decryptedRes.c_str());
-                    write(STDOUT_FILENO, out, count);
-
                     if (strcmp(str.c_str(), "done") == 0) {
                         connections[noOfConnections][0] = currentUser;
                         connections[noOfConnections][1] = username;
@@ -674,10 +664,9 @@ void *clientHandler(void *clientID) {
             string receiver;
             token = strtok(nullptr, " ");
             while (token != nullptr) {
-                message.append(token);
+                message.append(token).append(" ");
                 token = strtok(nullptr, " ");
             }
-            write(STDOUT_FILENO, "check7\n", 7);
             char o[1000];
             string sKey;
             for (int i = 0; i < noOfConnections; ++i) {
@@ -686,14 +675,12 @@ void *clientHandler(void *clientID) {
                     sKey = connections[i][2];
                 }
             }
-            write(STDOUT_FILENO, "check8\n", 7);
             char rcvr[100];
             int count;
             DES encrypt;
             char check[1000];
             strcpy(rcvr, receiver.c_str());
             int cid = findCID(rcvr);
-            write(STDOUT_FILENO, "check9\n", 7);
             string hexMsg = str2hex(message);
             string extendedSK = int2hex(stoi(sessionKey));
             string encryptedMsg = "message ";
@@ -701,17 +688,10 @@ void *clientHandler(void *clientID) {
             string print = message;
             print.append(" ").append(encryptedMsg).append("\n");
             count = sprintf(o, "%s", encryptedMsg.c_str());
-            write(STDOUT_FILENO, "check1\n", 7);
             write(clientsList[cid].serverWritingEnd, o, count);
-            write(STDOUT_FILENO, "check2\n", 7);
-            //to be continued
-
-
         } else if (operation == 8) {
-            write(STDOUT_FILENO, "check111\n", 9);
             string message;
             string sender;
-
             token = strtok(nullptr, " ");
             message = token;
             char o[1000];
@@ -731,23 +711,16 @@ void *clientHandler(void *clientID) {
             string decryptedMsg = decrypt.runDES(message, extendedSK, true);
             string strMsg = hex2str(decryptedMsg);
             string str = "message from ";
-            str.append(sender).append(" : ").append(strMsg);
+            str.append(sender).append(" : ").append(strMsg).append("\nInput next command.\n");
             char out[1000];
             int count = sprintf(out, "%s", str.c_str());
-            write(STDOUT_FILENO, out, count);
-
             write(clientsList[CID].msgsock, out, count);
             write(clientsList[senderCid].msgsock, "Input next command.\n", 20);
-            //to be continued
-
-
         } else if (operation == 7) {
             char *message;
             char user[100];
             char out[1000];
             message = strtok(nullptr, " ");
-            int count = sscanf(message, "%s", out);
-            write(STDOUT_FILENO, out, 100);
             DES decrypt;
             string keyPartD = decrypt.runDES(message, privKey, true);
             string str = hex2str(keyPartD);
@@ -774,8 +747,7 @@ void *clientHandler(void *clientID) {
             string msg = "response ";
             string encryptedNonce = d.runDES(nonceHex, extendedKey, false);
             msg.append(encryptedNonce);
-            count = sprintf(out, "%s", msg.c_str());
-            write(STDOUT_FILENO, out, count);
+            int count = sprintf(out, "%s", msg.c_str());
             if (cid != -1) {
                 write(clientsList[cid].serverWritingEnd, out, count);//serverWritingEnd
             } else {
